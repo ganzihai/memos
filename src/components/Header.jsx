@@ -48,7 +48,7 @@ const Header = ({
 
         {/* Logo */}
         <img
-          src="https://s3.bmp.ovh/imgs/2025/07/31/baf5bf7ff49cae82.jpg"
+          src="https://img.ganzi.fun/file/AgACAgUAAyEGAATnFyQYAAMYacjUSC3ZPRK5_FAgnJnO7Ir35eIAAj8Vaxv5HUBWR7L7seHaJWABAAMCAAN4AAM6BA.png"
           alt="应用Logo"
           className="h-10 w-10 rounded-full object-cover"
         />
