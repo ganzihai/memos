@@ -57,6 +57,7 @@ const MemoEditor = ({
   const [activeEmojiCategory, setActiveEmojiCategory] = useState(EMOJI_CATEGORIES[0]?.key || 'bili');
   const [emojiMap, setEmojiMap] = useState({});
   const emojiPanelRef = useRef(null); // { categoryKey: [{name, file}] }
+  const attachInputRef = useRef(null);
 
   // Audio recording state and waveform
   const mediaRecorderRef = useRef(null);
@@ -368,6 +369,48 @@ const MemoEditor = ({
     } catch (e) {
       console.warn('Waveform setup failed:', e);
     }
+  };
+
+  // 初始化文件存储（S3优先）
+  useEffect(() => {
+    try {
+      const s3CfgRaw = localStorage.getItem('s3Config');
+      if (s3CfgRaw) {
+        const cfg = JSON.parse(s3CfgRaw);
+        if (cfg && cfg.enabled) {
+          try { fileStorageService.init(cfg); } catch {}
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleAttachFileSelect = async (file) => {
+    if (!file) return;
+    try {
+      let url = '';
+      // 若已配置S3，强制走S3，无论大小
+      try {
+        const res = await fileStorageService.uploadToS3(file, { type: 'file' });
+        url = res?.url || '';
+      } catch (_) {
+        // 回退为 Base64
+        const res = await fileStorageService.uploadToBase64(file, { type: 'file' });
+        url = res?.data || '';
+      }
+      if (!url) return;
+      const name = file.name || 'file';
+      const isImage = (file.type || '').startsWith('image/');
+      const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
+      insertSnippetAtCursor(snippet, snippet.length);
+    } catch (e) {
+      console.warn('attach file failed', e);
+    }
+  };
+
+  const onAttachInputChange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleAttachFileSelect(f);
+    try { e.target.value = ''; } catch {}
   };
 
   const cleanupRecording = () => {
@@ -886,6 +929,19 @@ const MemoEditor = ({
                     <path d="M8.5 14c1 1.2 2.5 2 3.5 2s2.5-.8 3.5-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </button>
+
+                {/* 附件上传按钮 */}
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); attachInputRef.current?.click(); }}
+                  className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                  title="上传附件"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 7v10a5 5 0 0 0 10 0V7a3 3 0 0 0-6 0v9a1 1 0 0 0 2 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                <input ref={attachInputRef} type="file" className="hidden" onChange={onAttachInputChange} />
 
                 {/* 录音按钮 */}
                 <button
