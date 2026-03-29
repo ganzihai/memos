@@ -43,7 +43,7 @@ const MemoList = ({
   const [audioUrls, setAudioUrls] = useState({});
   const audioRefs = useRef({});
   const [playing, setPlaying] = useState({});
-
+  const [expandedMemos, setExpandedMemos] = useState({});
   const formatMs = (ms) => {
     if (!ms && ms !== 0) return '';
     const sec = Math.max(0, Math.floor(ms / 1000));
@@ -129,7 +129,15 @@ const MemoList = ({
       document.removeEventListener('touchstart', handleOutside);
     };
   }, [editingId, onSaveEdit]);
+  // 切换展开/折叠状态
+  const toggleExpand = (memoId) => {
+    setExpandedMemos(prev => ({
+      ...prev,
+      [memoId]: !prev[memoId]
+    }));
+  };
 
+  const MAX_CONTENT_LENGTH = 200; // 200字时折叠
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 标题区域 */}
@@ -338,11 +346,43 @@ const MemoList = ({
                         </div>
                       </div>
                     ) : (
-                      <ContentRenderer
-                        content={memo.content}
-                        activeTag={activeTag}
-                        onTagClick={onTagClick}
-                      />
+                      <>
+                        {memo.content.length > MAX_CONTENT_LENGTH && !expandedMemos[memo.id] ? (
+                          <div>
+                            <ContentRenderer
+                              content={memo.content.substring(0, MAX_CONTENT_LENGTH)}
+                              activeTag={activeTag}
+                              onTagClick={onTagClick}
+                            />
+                            <div className="mt-2">
+                              <button
+                                onClick={() => toggleExpand(memo.id)}
+                                className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                              >
+                                展开全文
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <ContentRenderer
+                              content={memo.content}
+                              activeTag={activeTag}
+                              onTagClick={onTagClick}
+                            />
+                            {memo.content.length > MAX_CONTENT_LENGTH && expandedMemos[memo.id] && (
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => toggleExpand(memo.id)}
+                                  className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                                >
+                                  收起
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* 反链 chips（展示在每条 memo 下面） */}
