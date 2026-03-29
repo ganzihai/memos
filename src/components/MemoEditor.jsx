@@ -405,89 +405,34 @@ const MemoEditor = ({
 
   const handleAttachFileSelect = async (file) => {
     if (!file) return;
-    
-    // 立即向用户提供上传反馈，防止无响应的错觉
+
     const toastId = toast.loading('正在上传文件...');
-    
     try {
-      let url = '';
-      
-      // 1. 首先尝试使用后端的 /api/upload 接口（依赖 Cloudflare Pages R2 绑定）
-      let apiUploadDenied = false;
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const uploadRes = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        
-        if (uploadRes.ok) {
-          const result = await uploadRes.json();
-          if (result.success && result.url) {
-            url = result.url;
-          } else {
-            throw new Error(result.error || 'API上传成功但未返回URL');
-          }
-        } else if (uploadRes.status === 404) {
-          console.log('未检测到 /api/upload 路由，降级为前端上传');
-        } else {
-          let errMsg = `后端错误状态码：${uploadRes.status}`;
-          try {
-            const body = await uploadRes.json();
-            if (body.error) errMsg = body.error;
-          } catch(err) {}
-          throw new Error(errMsg);
-        }
-      } catch (e) {
-        if (e.message !== 'Failed to fetch' && !e.message.includes('NetworkError')) {
-          apiUploadDenied = true;
-          // 是具体的业务错误或服务端报错，直接抛出，阻断走前台大文件处理导致浏览器彻底卡死
-          throw e;
-        } else {
-          console.log('网络错误或未配置后端，降级为前端直传', e);
-        }
-      }
-      
-      // 2. 如果后端上传失败（且不是明确的报错异常），降级到之前的前端上传逻辑
-      if (!url && !apiUploadDenied) {
-        // 每次上传前都尝试重新初始化，确保拿到最新的配置
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        let errMsg = `上传失败（${uploadRes.status}）`;
         try {
-          const s3CfgRaw = localStorage.getItem('s3Config');
-          if (s3CfgRaw) {
-            const cfg = JSON.parse(s3CfgRaw);
-            if (cfg && cfg.enabled) {
-              fileStorageService.init(cfg);
-            }
-          }
-        } catch (e) {
-          console.warn('Re-init S3 config failed:', e);
-        }
-        
-        // 直接调用 fileStorageService.processFile 进行统一处理
-        // 附件强制使用S3上传（如果启用了S3的话）
-        const res = await fileStorageService.processFile(file, { type: 'file', forceS3: true });
-        
-        if (res) {
-          if (res.storageType === 's3' && res.url) {
-            url = res.url;
-          } else if (res.storageType === 'indexeddb') {
-            // 对于 IndexedDB 存储，我们使用特定的语法来标记
-            url = `idb://${res.id}`;
-          } else if (res.storageType === 'base64' && res.data) {
-            url = res.data;
-          }
-        }
+          const body = await uploadRes.json();
+          if (body.error) errMsg = body.error;
+        } catch {}
+        throw new Error(errMsg);
       }
-      
-      if (!url) {
-        throw new Error('未能获取到有效的文件地址');
+
+      const result = await uploadRes.json();
+      if (!result.success || !result.url) {
+        throw new Error(result.error || '上传成功但未返回文件地址');
       }
-      
+
       const name = file.name || 'file';
       const isImage = (file.type || '').startsWith('image/');
-      const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
+      const snippet = isImage ? `![${name}](${result.url})` : `[${name}](${result.url})`;
       insertSnippetAtCursor(snippet, snippet.length);
       toast.success('附件上传成功', { id: toastId });
     } catch (e) {
@@ -839,8 +784,15 @@ const MemoEditor = ({
         rows={isFocused ? 5 : 2}
       />
 
-      {/* 反链 Chips（编辑时显示） */}
-      {isFocused && backlinkMemos.length > 0 && (
+      {/* 折叠渐隐遮罩 - 仅在未聚焦时显示，自动适配 dark/light 模式 */}
+      {!isFocused && (
+        <div
+          className="pointer-events-none absolute bottom-[32px] left-0 right-0 h-12 bg-gradient-to-b from-transparent to-white dark:to-gray-800"
+        />
+      )}
+
+      {/* 反链 Chips（始终显示，不受折叠状态影响） */}
+      {backlinkMemos.length > 0 && (
         <div className="px-3 pb-1 -mt-2 flex flex-wrap gap-2">
           {backlinkMemos.map((m) => (
             <span key={m.id} className="inline-flex items-center group">
@@ -867,8 +819,8 @@ const MemoEditor = ({
         </div>
       )}
 
-      {/* 音频 Chips（编辑时显示） */}
-      {isFocused && Array.isArray(audioClips) && audioClips.length > 0 && (
+      {/* 音频 Clips（始终显示，不受折叠状态影响） */}
+      {Array.isArray(audioClips) && audioClips.length > 0 && (
         <div className="px-3 pb-1 -mt-1 flex flex-wrap gap-2">
           {audioClips.map((clip, idx) => {
             const key = String(idx);
