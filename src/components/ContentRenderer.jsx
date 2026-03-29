@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
@@ -181,6 +181,41 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     }
   }, []);
 
+  const CodeBlock = ({ text, lang }) => {
+    const [copied, setCopied] = useState(false);
+    let html = '';
+    if (window.hljs) {
+      if (lang) {
+        try { html = window.hljs.highlight(text, { language: lang }).value; } catch { html = window.hljs.highlightAuto(text).value; }
+      } else {
+        html = window.hljs.highlightAuto(text).value;
+      }
+    }
+    const label = (lang || 'text').toUpperCase();
+    const onCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {}
+    };
+    return (
+      <div className="my-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+        <div className="flex items-center justify-between px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300">
+          <span className="uppercase tracking-wide">{label}</span>
+          <button onClick={onCopy} className="px-2 py-1 rounded bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        {html ? (
+          <pre className="px-3 pb-3 overflow-x-auto"><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
+        ) : (
+          <pre className="px-3 pb-3 overflow-x-auto"><code>{text}</code></pre>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`prose prose-sm prose-p:my-1 prose-h1:my-1 prose-h2:my-1 prose-h3:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 max-w-none dark:prose-invert ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
       {parts.map((part, index) => {
@@ -320,30 +355,13 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                           }
                           return <img {...props} />;
                         },
-                        code: ({node, inline, className, children, ...props}) => {
+                        code: ({inline, className, children, ...props}) => {
                           const raw = String(children || '');
                           const text = raw.replace(/\\n/g, '\n');
-                          if (inline) {
-                            return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
-                          }
+                          if (inline) return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
                           const m = /language-([\w-]+)/.exec(className || '');
                           const lang = m ? m[1] : null;
-                          let html = '';
-                          if (window.hljs) {
-                            if (lang) {
-                              try { html = window.hljs.highlight(text, { language: lang }).value; } catch { html = window.hljs.highlightAuto(text).value; }
-                            } else {
-                              html = window.hljs.highlightAuto(text).value;
-                            }
-                          }
-                          if (html) {
-                            return (
-                              <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
-                            );
-                          }
-                          return (
-                            <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code {...props}>{text}</code></pre>
-                          );
+                          return <CodeBlock text={text} lang={lang} />;
                         },
                       }}
                       remarkPlugins={[remarkEmojiShortcode]}
@@ -441,30 +459,13 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                                 }
                                 return <img {...props} />;
                               },
-                              code: ({node, inline, className, children, ...props}) => {
+                              code: ({inline, className, children, ...props}) => {
                                 const raw = String(children || '');
                                 const text = raw.replace(/\\n/g, '\n');
-                                if (inline) {
-                                  return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
-                                }
+                                if (inline) return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
                                 const m = /language-([\w-]+)/.exec(className || '');
                                 const lang = m ? m[1] : null;
-                                let html = '';
-                                if (window.hljs) {
-                                  if (lang) {
-                                    try { html = window.hljs.highlight(text, { language: lang }).value; } catch { html = window.hljs.highlightAuto(text).value; }
-                                  } else {
-                                    html = window.hljs.highlightAuto(text).value;
-                                  }
-                                }
-                                if (html) {
-                                  return (
-                                    <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
-                                  );
-                                }
-                                return (
-                                  <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code {...props}>{text}</code></pre>
-                                );
+                                return <CodeBlock text={text} lang={lang} />;
                               },
                             }}
                             remarkPlugins={[remarkEmojiShortcode]}
