@@ -8,6 +8,7 @@ import { EMOJI_CATEGORIES, loadEmojiItems, buildEmojiUrl } from '@/config/emoji'
 import { getEmojiCategory } from '@/config/emoji';
 import fileStorageService from '@/lib/fileStorageService';
 import AudioWaveform from '@/components/AudioWaveform';
+import { toast } from 'sonner';
 
 const MemoEditor = ({
   value = '',
@@ -402,8 +403,10 @@ const MemoEditor = ({
       const isImage = (file.type || '').startsWith('image/');
       const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
       insertSnippetAtCursor(snippet, snippet.length);
+      try { toast.success('附件已插入'); } catch {}
     } catch (e) {
       console.warn('attach file failed', e);
+      try { toast.error('附件上传失败'); } catch {}
     }
   };
 
@@ -933,7 +936,7 @@ const MemoEditor = ({
                 {/* 附件上传按钮 */}
                 <button
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); attachInputRef.current?.click(); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); attachInputRef.current?.click(); }}
                   className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                   title="上传附件"
                 >
