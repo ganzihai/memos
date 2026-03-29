@@ -11,7 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
  * - isOpen: boolean 是否打开
  * - onClose: () => void 关闭回调（内部会在关闭时记录本地“已查看”状态）
  */
-const TutorialDialog = ({ false, onClose }) => {
+const TutorialDialog = ({ isOpen, onClose }) => {
 		const { themeColor } = useTheme();
 	const pages = useMemo(() => [
 		{
@@ -94,7 +94,7 @@ const TutorialDialog = ({ false, onClose }) => {
 	const isAgreementPage = activeIndex === 0;
 
 		return (
-			<Dialog open={isOpen} onOpenChange={(open) => !open && markViewedAndClose()}>
+			<Dialog open={false} onOpenChange={(open) => !open && markViewedAndClose()}>
 						<DialogContent className="p-0 border-0 bg-transparent shadow-none flex items-center justify-center [&>button]:hidden">
 							<Card className="w-[98vw] sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl max-h-[92vh] flex flex-col bg-white dark:bg-gray-900 shadow-xl font-sans">
 						<CardHeader className="flex flex-row items-center justify-end space-y-0 py-3">
