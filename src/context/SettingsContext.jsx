@@ -20,8 +20,8 @@ export function SettingsProvider({ children }) {
     types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全部类型
   });
   const [fontConfig, setFontConfig] = useState({
-    selectedFont: 'default', // default, jinghua, lxgw, kongshan
-    fontSize: 16 // px, default 16
+    selectedFont: 'kongshan', // default, jinghua, lxgw, kongshan
+    fontSize: 14 // px, default 16
   });
   const [backgroundConfig, setBackgroundConfig] = useState({
     imageUrl: '',
@@ -30,7 +30,7 @@ export function SettingsProvider({ children }) {
   useRandom: false // 是否使用随机背景
   });
   const [avatarConfig, setAvatarConfig] = useState({
-    imageUrl: '' // 用户自定义头像URL
+    imageUrl: 'https://img.ganzi.fun/file/AgACAgUAAyEGAATnFyQYAAMYacjUSC3ZPRK5_FAgnJnO7Ir35eIAAj8Vaxv5HUBWR7L7seHaJWABAAMCAAN4AAM6BA.png' // 用户自定义头像URL
   });
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => isSelfHosted);
   const [aiConfig, setAiConfig] = useState({
@@ -44,9 +44,9 @@ export function SettingsProvider({ children }) {
   const [musicConfig, setMusicConfig] = useState(() => {
     try {
       const saved = localStorage.getItem('musicConfig');
-      return saved ? JSON.parse(saved) : { enabled: true, customSongs: [] };
+      return saved ? JSON.parse(saved) : { enabled: false, customSongs: [] };
     } catch {
-      return { enabled: true, customSongs: [] };
+      return { enabled: false, customSongs: [] };
     }
   });
 
