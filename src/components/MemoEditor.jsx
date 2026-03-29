@@ -412,31 +412,54 @@ const MemoEditor = ({
     try {
       let url = '';
       
-      // 每次上传前都尝试重新初始化，确保拿到最新的配置
+      // 1. 首先尝试使用后端的 /api/upload 接口（依赖 Cloudflare Pages R2 绑定）
       try {
-        const s3CfgRaw = localStorage.getItem('s3Config');
-        if (s3CfgRaw) {
-          const cfg = JSON.parse(s3CfgRaw);
-          if (cfg && cfg.enabled) {
-            fileStorageService.init(cfg);
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (uploadRes.ok) {
+          const result = await uploadRes.json();
+          if (result.success && result.url) {
+            url = result.url;
           }
         }
       } catch (e) {
-        console.warn('Re-init S3 config failed:', e);
+        console.log('后端上传接口调用失败，降级为前端直传', e);
       }
       
-      // 直接调用 fileStorageService.processFile 进行统一处理
-      // 附件强制使用S3上传（如果启用了S3的话）
-      const res = await fileStorageService.processFile(file, { type: 'file', forceS3: true });
-      
-      if (res) {
-        if (res.storageType === 's3' && res.url) {
-          url = res.url;
-        } else if (res.storageType === 'indexeddb') {
-          // 对于 IndexedDB 存储，我们使用特定的语法来标记
-          url = `idb://${res.id}`;
-        } else if (res.storageType === 'base64' && res.data) {
-          url = res.data;
+      // 2. 如果后端上传失败，降级到之前的前端上传逻辑
+      if (!url) {
+        // 每次上传前都尝试重新初始化，确保拿到最新的配置
+        try {
+          const s3CfgRaw = localStorage.getItem('s3Config');
+          if (s3CfgRaw) {
+            const cfg = JSON.parse(s3CfgRaw);
+            if (cfg && cfg.enabled) {
+              fileStorageService.init(cfg);
+            }
+          }
+        } catch (e) {
+          console.warn('Re-init S3 config failed:', e);
+        }
+        
+        // 直接调用 fileStorageService.processFile 进行统一处理
+        // 附件强制使用S3上传（如果启用了S3的话）
+        const res = await fileStorageService.processFile(file, { type: 'file', forceS3: true });
+        
+        if (res) {
+          if (res.storageType === 's3' && res.url) {
+            url = res.url;
+          } else if (res.storageType === 'indexeddb') {
+            // 对于 IndexedDB 存储，我们使用特定的语法来标记
+            url = `idb://${res.id}`;
+          } else if (res.storageType === 'base64' && res.data) {
+            url = res.data;
+          }
         }
       }
       
