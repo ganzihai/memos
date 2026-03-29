@@ -178,11 +178,7 @@ const MemoList = ({
         </div>
       </div>
 
-      {/* 滚动容器 */}
-  <div
-        ref={memosContainerRef}
-        className="flex-1 overflow-y-auto mobile-memos-container lg:mobile-memos-container-disabled px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 min-h-[250px]"
-      >
+      <div className="flex-1 mobile-memos-container lg:mobile-memos-container-disabled min-h-[250px]">
     {memos.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <div className="text-center">
@@ -486,17 +482,6 @@ const MemoList = ({
           </div>
         )}
 
-        {/* 回到顶部按钮 */}
-        {showScrollToTop && (
-          <button
-            onClick={onScrollToTop}
-            className="absolute bottom-6 right-6 z-30 flex items-center justify-center w-12 h-12 rounded-full bg-gray-200/90 dark:bg-gray-700/90 text-gray-700 dark:text-gray-300 transition-all duration-300 hover:bg-gray-300/90 dark:hover:bg-gray-600/90 hover:scale-110 shadow-lg backdrop-blur-sm border border-gray-300/20 dark:border-gray-600/20"
-            aria-label="回到顶部"
-            title="回到顶部"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </button>
-        )}
       </div>
     </div>
   );
