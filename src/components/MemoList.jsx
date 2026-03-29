@@ -140,7 +140,7 @@ const MemoList = ({
               className="h-4 w-4 sm:h-5 sm:w-5 mr-2 transition-colors duration-300"
               style={{ color: themeColor }}
             />
-            {isAuthenticated ? '近期想法' : 'Memos'}
+            {isAuthenticated ? '近期日志' : 'Memos'}
           </h2>
           
           {/* 筛选条件显示区域 */}
