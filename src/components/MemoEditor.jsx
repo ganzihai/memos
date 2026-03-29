@@ -1019,26 +1019,37 @@ const MemoEditor = ({
                   </svg>
                 </button>
 
-                {/* 附件上传按钮（修复：使用真正的label关联来拉起文件选择框，绕过浏览器安全限制） */}
+                {/* 附件上传按钮（修复：原先日渐丢失焦点会导致本组件被直接卸载，使用 onClick 显式 click 隐藏的 input） */}
                 <div className="relative inline-flex items-center justify-center">
                   <input 
                     id={attachInputIdRef.current} 
                     ref={attachInputRef} 
                     type="file" 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                    className="hidden" 
                     onChange={(e) => {
-                      // 这里也需要阻止事件冒泡，防止触发失焦
                       e.stopPropagation();
                       onAttachInputChange(e);
                     }} 
-                    onMouseDown={(e) => { e.stopPropagation(); /* 阻止冒泡避免触发外部容器的MouseDown事件，且保留默认行为以弹出选择器 */ }}
                     title="上传附件"
                   />
-                  <div className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors pointer-events-none">
+                  <button 
+                    type="button"
+                    onMouseDown={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (attachInputRef.current) {
+                        attachInputRef.current.click();
+                      }
+                    }}
+                    className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M7 7v10a5 5 0 0 0 10 0V7a3 3 0 0 0-6 0v9a1 1 0 0 0 2 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
-                  </div>
+                  </button>
                 </div>
 
                 {/* 录音按钮 */}
