@@ -24,9 +24,9 @@ ENVIRONMENT = "development"
 bucket = "./build" # 构建输出目录
 
 # 自定义域名
- [env.production]
- routes = [
-   { pattern = "n.ganzi.fun", custom_domain = true },
-   { pattern = "api.n.ganzi.fun/*", zone_name = "n.ganzi.fun" }
- ]
- ]
+[env.production]
+routes = [
+  { pattern = "n.ganzi.fun", custom_domain = true },
+  { pattern = "api.n.ganzi.fun/*", zone_name = "n.ganzi.fun" }
+]
+]
