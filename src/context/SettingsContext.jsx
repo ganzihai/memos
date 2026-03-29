@@ -392,7 +392,8 @@ export function SettingsProvider({ children }) {
             backgroundConfig: JSON.parse(localStorage.getItem('backgroundConfig') || '{"imageUrl":"","brightness":50,"blur":10,"useRandom":false}'),
             avatarConfig: JSON.parse(localStorage.getItem('avatarConfig') || '{"imageUrl":""}'),
             canvasConfig: JSON.parse(localStorage.getItem('canvasState') || 'null'),
-            musicConfig: JSON.parse(localStorage.getItem('musicConfig') || '{"enabled":true,"customSongs":[]}')
+            musicConfig: JSON.parse(localStorage.getItem('musicConfig') || '{"enabled":true,"customSongs":[]}'),
+            s3Config: JSON.parse(localStorage.getItem('s3Config') || '{"enabled":false,"endpoint":"","accessKeyId":"","secretAccessKey":"","bucket":"","region":"auto","publicUrl":"","provider":"r2"}')
           };
           await D1ApiClient.syncUserData(localData);
         } catch (_) {
@@ -686,7 +687,12 @@ export function SettingsProvider({ children }) {
   // Subscribe to app-level data change events and page lifecycle to auto sync
   useEffect(() => {
     if (!cloudSyncEnabled) return;
-    const onChange = () => scheduleSync('event');
+    const onChange = (e) => {
+      const part = e?.detail?.part || '';
+      // 避免由同步和恢复自身触发的事件再次触发同步，防止死循环
+      if (part.startsWith('sync.') || part.startsWith('restore.') || part === 'guest.refresh') return;
+      scheduleSync('event');
+    };
     const onVisibility = () => {
       // Avoid heavy sync while tab is hiding; will sync on next activity
     };
@@ -752,6 +758,26 @@ export function SettingsProvider({ children }) {
               updatedAt: memo.updated_at
             }));
             localStorage.setItem('memos', JSON.stringify(localMemos));
+          }
+
+          if (res.data?.settings) {
+            if (res.data.settings.pinned_memos) localStorage.setItem('pinnedMemos', res.data.settings.pinned_memos);
+            if (res.data.settings.theme_color) localStorage.setItem('themeColor', res.data.settings.theme_color);
+            if (res.data.settings.dark_mode !== null) localStorage.setItem('darkMode', res.data.settings.dark_mode.toString());
+            if (res.data.settings.hitokoto_config) localStorage.setItem('hitokotoConfig', res.data.settings.hitokoto_config);
+            if (res.data.settings.font_config) localStorage.setItem('fontConfig', res.data.settings.font_config);
+            if (res.data.settings.background_config) localStorage.setItem('backgroundConfig', res.data.settings.background_config);
+            if (res.data.settings.avatar_config) localStorage.setItem('avatarConfig', res.data.settings.avatar_config);
+            if (res.data.settings.canvas_config) localStorage.setItem('canvasState', res.data.settings.canvas_config);
+            if (res.data.settings.music_config) localStorage.setItem('musicConfig', res.data.settings.music_config);
+            if (res.data.settings.s3_config) {
+              localStorage.setItem('s3Config', res.data.settings.s3_config);
+              try { setS3Config(JSON.parse(res.data.settings.s3_config)); } catch {}
+            }
+            
+            // 如果成功从远端恢复了数据，自动开启云同步
+            localStorage.setItem('cloudSyncEnabled', 'true');
+            setCloudSyncEnabled(true);
           }
 
           try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.d1.api' } })); } catch {}
@@ -865,7 +891,9 @@ export function SettingsProvider({ children }) {
         fontConfig: JSON.parse(localStorage.getItem('fontConfig') || '{"selectedFont":"default"}'),
   backgroundConfig: JSON.parse(localStorage.getItem('backgroundConfig') || '{"imageUrl":"","brightness":50,"blur":10,"useRandom":false}'),
   avatarConfig: JSON.parse(localStorage.getItem('avatarConfig') || '{"imageUrl":""}'),
-  canvasConfig: JSON.parse(localStorage.getItem('canvasState') || 'null')
+  canvasConfig: JSON.parse(localStorage.getItem('canvasState') || 'null'),
+  musicConfig: JSON.parse(localStorage.getItem('musicConfig') || '{"enabled":true,"customSongs":[]}'),
+  s3Config: JSON.parse(localStorage.getItem('s3Config') || '{"enabled":false,"endpoint":"","accessKeyId":"","secretAccessKey":"","bucket":"","region":"auto","publicUrl":"","provider":"r2"}')
       };
 
   // 优先尝试使用 API 客户端（适用于 Cloudflare Pages）
@@ -930,6 +958,13 @@ export function SettingsProvider({ children }) {
             }
             if (result.data.settings.canvas_config) {
               localStorage.setItem('canvasState', result.data.settings.canvas_config);
+            }
+            if (result.data.settings.music_config) {
+              localStorage.setItem('musicConfig', result.data.settings.music_config);
+            }
+            if (result.data.settings.s3_config) {
+              localStorage.setItem('s3Config', result.data.settings.s3_config);
+              try { setS3Config(JSON.parse(result.data.settings.s3_config)); } catch {}
             }
           }
           
