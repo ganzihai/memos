@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Clock, MoreVertical, ArrowUp, X, Image, Globe, Lock } from 'lucide-react';
+import { Clock, MoreVertical, ArrowUp, X, Image, Globe, Lock, Paperclip, File } from 'lucide-react';
 import MemoEditor from '@/components/MemoEditor';
 import ContentRenderer from '@/components/ContentRenderer';
 import { useTheme } from '@/context/ThemeContext';
@@ -137,6 +137,31 @@ const MemoList = ({
     }));
   };
 
+  const extractAttachments = (content) => {
+    const attachments = [];
+    const lines = (content || '').split('\n');
+    const newLines = [];
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    
+    for (const line of lines) {
+      const stripped = line.replace(linkRegex, '').trim();
+      if (stripped === '' && line.trim() !== '') {
+        let match;
+        linkRegex.lastIndex = 0;
+        while ((match = linkRegex.exec(line)) !== null) {
+          attachments.push({ name: match[1], url: match[2] });
+        }
+      } else {
+        newLines.push(line);
+      }
+    }
+    
+    return {
+      attachments,
+      newContent: newLines.join('\n').trim()
+    };
+  };
+
   const MAX_CONTENT_LENGTH = 200; // 200字时折叠
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -189,7 +214,9 @@ const MemoList = ({
         ) : (
           <div className="flex-1 overflow-y-auto scrollbar-hidden">
             <div className="space-y-4 pb-4">
-      {memos.map(memo => (
+      {memos.map(memo => {
+        const { attachments, newContent } = extractAttachments(memo.content);
+        return (
                 <Card
                   key={memo.id}
                   className={`group hover:shadow-md transition-shadow rounded-xl shadow-sm relative bg-white dark:bg-gray-800 ${
@@ -343,13 +370,16 @@ const MemoList = ({
                       </div>
                     ) : (
                       <>
-                        {memo.content.length > MAX_CONTENT_LENGTH && !expandedMemos[memo.id] ? (
+                        {newContent.length > MAX_CONTENT_LENGTH && !expandedMemos[memo.id] ? (
                           <div className="custom-font-content">
-                            <ContentRenderer
-                              content={memo.content.substring(0, MAX_CONTENT_LENGTH)}
-                              activeTag={activeTag}
-                              onTagClick={onTagClick}
-                            />
+                            <div className="relative overflow-hidden" style={{ maxHeight: '180px' }}>
+                              <ContentRenderer
+                                content={newContent}
+                                activeTag={activeTag}
+                                onTagClick={onTagClick}
+                              />
+                              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white dark:from-gray-800 to-transparent pointer-events-none" />
+                            </div>
                             <div className="mt-2">
                               <button
                                 onClick={() => toggleExpand(memo.id)}
@@ -362,11 +392,11 @@ const MemoList = ({
                         ) : (
                           <div className="custom-font-content">
                             <ContentRenderer
-                              content={memo.content}
+                              content={newContent}
                               activeTag={activeTag}
                               onTagClick={onTagClick}
                             />
-                            {memo.content.length > MAX_CONTENT_LENGTH && expandedMemos[memo.id] && (
+                            {newContent.length > MAX_CONTENT_LENGTH && expandedMemos[memo.id] && (
                               <div className="mt-2">
                                 <button
                                   onClick={() => toggleExpand(memo.id)}
@@ -451,6 +481,39 @@ const MemoList = ({
                             </span>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* 附件展示 */}
+                    {attachments.length > 0 && (
+                      <div className="mt-3 border rounded-lg border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex items-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                          <Paperclip className="w-3.5 h-3.5 mr-1.5" />
+                          Attachments ({attachments.length})
+                        </div>
+                        <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white dark:bg-gray-800">
+                          {attachments.map((att, idx) => {
+                            const extMatch = att.name.match(/\.([^.]+)$/);
+                            const ext = extMatch ? extMatch[1].toUpperCase() : 'FILE';
+                            return (
+                              <a
+                                key={idx}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center p-2 rounded-md border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+                              >
+                                <div className="w-8 h-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center mr-3 flex-shrink-0 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 transition-colors">
+                                  <File className="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400" />
+                                </div>
+                                <div className="flex flex-col overflow-hidden min-w-0">
+                                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{att.name}</span>
+                                  <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{ext}</span>
+                                </div>
+                              </a>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 

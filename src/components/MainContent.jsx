@@ -132,7 +132,9 @@ const MainContent = ({
         {showScrollToTop && (
           <button
             onClick={onScrollToTop}
-            className="fixed bottom-6 right-6 z-30 flex items-center justify-center w-12 h-12 rounded-full bg-gray-200/90 dark:bg-gray-700/90 text-gray-700 dark:text-gray-300 transition-all duration-300 hover:bg-gray-300/90 dark:hover:bg-gray-600/90 hover:scale-110 shadow-lg backdrop-blur-sm border border-gray-300/20 dark:border-gray-600/20"
+            className={`fixed bottom-6 z-30 flex items-center justify-center w-12 h-12 rounded-full bg-gray-200/90 dark:bg-gray-700/90 text-gray-700 dark:text-gray-300 transition-all duration-300 hover:bg-gray-300/90 dark:hover:bg-gray-600/90 hover:scale-110 shadow-lg backdrop-blur-sm border border-gray-300/20 dark:border-gray-600/20 ${
+              isRightSidebarPinned ? 'right-6 lg:right-[calc(max(20%,240px)+2rem)]' : 'right-6'
+            }`}
             aria-label="回到顶部"
             title="回到顶部"
           >
