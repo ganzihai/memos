@@ -78,18 +78,18 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
   return (
     <div className="dark:text-gray-200">
       {showTitle && (
-        <div className="flex items-center justify-end mb-4 pr-2">
+        <div className="flex items-center justify-end mb-3 pr-2">
           <Tag
             className="h-5 w-5 mr-2 transition-colors duration-300"
             style={{ color: themeColor }}
           />
-          <h2 className="text-lg font-semibold">
+          <h2 className="text-base font-semibold">
             标签管理
           </h2>
         </div>
       )}
 
-      <div className={`space-y-1 custom-font-content`} style={{ fontSize: fontConfig?.fontSize ? `${fontConfig.fontSize}px` : undefined }}>
+      <div className={`space-y-0.5 custom-font-content text-sm leading-tight`} style={{ fontSize: fontConfig?.fontSize ? `${Math.max(10, fontConfig.fontSize - 2)}px` : undefined }}>
         {sortedParentTags.length > 0 ? (
           sortedParentTags.map(parentTag => {
             const hasChildren = tagHierarchy[parentTag].length > 0;
@@ -97,10 +97,10 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
             const isParentActive = activeTag === parentTag;
 
             return (
-              <div key={parentTag} className="space-y-1">
+              <div key={parentTag} className="space-y-0.5">
                 {/* 父标签 */}
                 <div
-                  className={`flex items-center p-2 rounded-lg transition-colors ${
+                  className={`flex items-center py-1.5 px-2 rounded-lg transition-colors ${
                     isParentActive
                       ? 'border'
                       : 'hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -149,7 +149,7 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
                   >
                     <span className="font-medium">{parentTag}</span>
                     {/* 优化计数显示：添加深色模式下的文字颜色 */}
-                    <span className="text-xs bg-gray-200 dark:bg-gray-700 rounded-full px-2 py-1 text-gray-800 dark:text-gray-200">
+                    <span className="text-[11px] bg-gray-200 dark:bg-gray-700 rounded-full px-1.5 py-0.5 text-gray-800 dark:text-gray-200">
                       {tagFrequency[parentTag] || 0}
                     </span>
                   </div>
@@ -157,7 +157,7 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
 
                 {/* 子标签 */}
                 {hasChildren && isExpanded && (
-                  <div className="ml-6 space-y-1">
+                  <div className="ml-6 space-y-0.5">
                     {tagHierarchy[parentTag].map(childTag => {
                       const fullChildTag = `${parentTag}/${childTag}`;
                       const isChildActive = activeTag === fullChildTag;
@@ -167,7 +167,7 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
                         <div
                           key={childTag}
                           onClick={() => handleTagClick(childTag, true, parentTag)}
-                          className={`flex items-center p-2 pl-6 rounded-lg cursor-pointer transition-colors ${
+                          className={`flex items-center py-1 px-2 pl-6 rounded-lg cursor-pointer transition-colors ${
                             isChildActive
                               ? 'border'
                               : 'hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -179,9 +179,9 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
                         >
                           <Hash className="h-3 w-3 text-gray-400 mr-2 flex-shrink-0" />
                           {/* 优化二级标签文字颜色 */}
-                          <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">{childTag}</span>
+                          <span className="text-xs text-gray-700 dark:text-gray-300 flex-1">{childTag}</span>
                           {/* 优化计数显示：添加深色模式下的文字颜色 */}
-                          <span className="text-xs bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-1 text-gray-700 dark:text-gray-300">
+                          <span className="text-[11px] bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5 text-gray-700 dark:text-gray-300">
                             {childFrequency}
                           </span>
                         </div>
@@ -199,7 +199,7 @@ const TagManager = ({ memos, activeTag, setActiveTag, showTitle = true }) => {
         {activeTag && (
           <button
             onClick={() => setActiveTag(null)}
-            className="mt-4 w-full text-sm transition-colors duration-300 hover:opacity-80"
+            className="mt-3 w-full text-sm transition-colors duration-300 hover:opacity-80"
             style={{ color: themeColor }}
           >
             清除筛选
