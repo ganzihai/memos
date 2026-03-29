@@ -56,7 +56,7 @@ const Header = ({
           className="ml-2 text-xl font-bold transition-colors duration-300"
           style={{ color: themeColor }}
         >
-          Meow
+          杆子日志
         </span>
       </div>
 
@@ -79,7 +79,7 @@ const Header = ({
           <Input
             ref={searchInputRef}
             type="search"
-            placeholder="搜索想法/音樂..."
+            placeholder="搜索日志..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
