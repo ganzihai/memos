@@ -167,7 +167,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   const { darkMode } = useTheme();
 
   return (
-    <div className={`prose prose-sm max-w-none dark:prose-invert ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
+    <div className={`prose prose-sm prose-p:my-1 prose-h1:my-1 prose-h2:my-1 prose-h3:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 max-w-none dark:prose-invert ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
       {parts.map((part, index) => {
         if (part.type === 'tag') {
           const isSecondLevel = part.tagName.includes('/');
