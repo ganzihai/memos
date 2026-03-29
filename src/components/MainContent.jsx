@@ -75,64 +75,65 @@ const MainContent = ({
           : 'lg:max-w-4xl lg:mx-auto px-4'
     }`}>
 
+      <div ref={memosContainerRef} className="flex-1 overflow-y-auto scrollbar-hidden relative">
+        <div className="px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6">
+          <Header
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            searchInputRef={searchInputRef}
+            onMobileMenuOpen={onMobileMenuOpen}
+            onOpenMusicSearch={onOpenMusicSearch}
+          />
 
-      <div ref={memosContainerRef} className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 relative">
-        <Header
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          searchInputRef={searchInputRef}
-          onMobileMenuOpen={onMobileMenuOpen}
-          onOpenMusicSearch={onOpenMusicSearch}
-        />
+          {isAuthenticated && (
+            <MemoInput
+              newMemo={newMemo}
+              setNewMemo={setNewMemo}
+              onAddMemo={onAddMemo}
+              onEditorFocus={onEditorFocus}
+              onEditorBlur={onEditorBlur}
+              allMemos={allMemos}
+              onAddBacklink={onAddBacklink}
+              onPreviewMemo={onPreviewMemo}
+              pendingNewBacklinks={pendingNewBacklinks}
+              onRemoveBacklink={onRemoveBacklink}
+              onAddAudioClip={onAddAudioClip}
+              audioClips={pendingNewAudioClips}
+              onRemoveAudioClip={onRemoveAudioClip}
+              isAuthenticated={isAuthenticated}
+            />
+          )}
 
-        {isAuthenticated && (
-          <MemoInput
-            newMemo={newMemo}
-            setNewMemo={setNewMemo}
-            onAddMemo={onAddMemo}
-            onEditorFocus={onEditorFocus}
-            onEditorBlur={onEditorBlur}
+          <MemoList
+            memos={filteredMemos}
+            pinnedMemos={pinnedMemos}
+            activeMenuId={activeMenuId}
+            editingId={editingId}
+            editContent={editContent}
+            activeTag={activeTag}
+            activeDate={activeDate}
+            showScrollToTop={showScrollToTop}
+            menuRefs={menuRefs}
+            memosContainerRef={memosContainerRef}
+            onMenuAction={onMenuAction}
+            onMenuContainerEnter={onMenuContainerEnter}
+            onMenuContainerLeave={onMenuContainerLeave}
+            onMenuButtonClick={onMenuButtonClick}
+            onEditContentChange={onEditContentChange}
+            onSaveEdit={onSaveEdit}
+            onCancelEdit={onCancelEdit}
+            onTagClick={onTagClick}
+            onScrollToTop={onScrollToTop}
+            clearFilters={clearFilters}
             allMemos={allMemos}
             onAddBacklink={onAddBacklink}
             onPreviewMemo={onPreviewMemo}
-            pendingNewBacklinks={pendingNewBacklinks}
             onRemoveBacklink={onRemoveBacklink}
             onAddAudioClip={onAddAudioClip}
-            audioClips={pendingNewAudioClips}
             onRemoveAudioClip={onRemoveAudioClip}
             isAuthenticated={isAuthenticated}
           />
-        )}
-
-        <MemoList
-          memos={filteredMemos}
-          pinnedMemos={pinnedMemos}
-          activeMenuId={activeMenuId}
-          editingId={editingId}
-          editContent={editContent}
-          activeTag={activeTag}
-          activeDate={activeDate}
-          showScrollToTop={showScrollToTop}
-          menuRefs={menuRefs}
-          memosContainerRef={memosContainerRef}
-          onMenuAction={onMenuAction}
-          onMenuContainerEnter={onMenuContainerEnter}
-          onMenuContainerLeave={onMenuContainerLeave}
-          onMenuButtonClick={onMenuButtonClick}
-          onEditContentChange={onEditContentChange}
-          onSaveEdit={onSaveEdit}
-          onCancelEdit={onCancelEdit}
-          onTagClick={onTagClick}
-          onScrollToTop={onScrollToTop}
-          clearFilters={clearFilters}
-          allMemos={allMemos}
-          onAddBacklink={onAddBacklink}
-          onPreviewMemo={onPreviewMemo}
-          onRemoveBacklink={onRemoveBacklink}
-          onAddAudioClip={onAddAudioClip}
-          onRemoveAudioClip={onRemoveAudioClip}
-          isAuthenticated={isAuthenticated}
-        />
+        </div>
 
         {showScrollToTop && (
           <button
