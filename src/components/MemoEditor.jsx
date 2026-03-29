@@ -946,6 +946,9 @@ const MemoEditor = ({
                   </svg>
                 </button>
                 <input id={attachInputIdRef.current} ref={attachInputRef} type="file" className="sr-only" onChange={onAttachInputChange} />
+                <label htmlFor={attachInputIdRef.current} className="ml-2 text-xs text-blue-600 cursor-pointer hover:underline select-none">
+                  选择文件
+                </label>
 
                 {/* 录音按钮 */}
                 <button
