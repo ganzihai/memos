@@ -53,7 +53,7 @@ const Header = ({
           className="h-10 w-10 rounded-full object-cover"
         />
         <span
-          className="ml-2 text-xl font-bold transition-colors duration-300"
+          className="ml-2 text-lg font-bold transition-colors duration-300"
           style={{ color: themeColor }}
         >
           杆子日志
