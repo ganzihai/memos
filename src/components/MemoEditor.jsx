@@ -59,6 +59,7 @@ const MemoEditor = ({
   const [emojiMap, setEmojiMap] = useState({});
   const emojiPanelRef = useRef(null); // { categoryKey: [{name, file}] }
   const attachInputRef = useRef(null);
+  const attachInputIdRef = useRef(`attach-${Math.random().toString(36).slice(2)}`);
 
   // Audio recording state and waveform
   const mediaRecorderRef = useRef(null);
@@ -933,18 +934,19 @@ const MemoEditor = ({
                   </svg>
                 </button>
 
-                {/* 附件上传按钮 */}
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); attachInputRef.current?.click(); }}
-                  className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                {/* 附件上传按钮（使用 label 触发 input，避免浏览器阻止程序化点击） */}
+                <label
+                  htmlFor={attachInputIdRef.current}
+                  role="button"
+                  tabIndex={0}
+                  className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                   title="上传附件"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M7 7v10a5 5 0 0 0 10 0V7a3 3 0 0 0-6 0v9a1 1 0 0 0 2 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                </button>
-                <input ref={attachInputRef} type="file" className="hidden" onChange={onAttachInputChange} />
+                </label>
+                <input id={attachInputIdRef.current} ref={attachInputRef} type="file" className="sr-only" onChange={onAttachInputChange} />
 
                 {/* 录音按钮 */}
                 <button
