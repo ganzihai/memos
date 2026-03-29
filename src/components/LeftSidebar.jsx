@@ -104,7 +104,7 @@ const LeftSidebar = ({
             className="h-5 w-5 mr-2 transition-colors duration-300"
             style={{ color: themeColor }}
           />
-          <h2 className="text-lg font-semibold dark:text-gray-200">记忆热力图</h2>
+          <h2 className="text-lg font-semibold dark:text-gray-200">日志时间</h2>
         </div>
 
         <div className="flex-1 overflow-hidden">
