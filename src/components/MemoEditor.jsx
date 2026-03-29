@@ -384,12 +384,42 @@ const MemoEditor = ({
         }
       }
     } catch { }
+    
+    // 监听s3配置变化
+    const handleS3Change = (e) => {
+      if (e.detail?.part === 's3') {
+        try {
+          const s3CfgRaw = localStorage.getItem('s3Config');
+          if (s3CfgRaw) {
+            const cfg = JSON.parse(s3CfgRaw);
+            if (cfg && cfg.enabled) {
+              fileStorageService.init(cfg);
+            }
+          }
+        } catch { }
+      }
+    };
+    window.addEventListener('app:dataChanged', handleS3Change);
+    return () => window.removeEventListener('app:dataChanged', handleS3Change);
   }, []);
 
   const handleAttachFileSelect = async (file) => {
     if (!file) return;
     try {
       let url = '';
+      
+      // 每次上传前都尝试重新初始化，确保拿到最新的配置
+      try {
+        const s3CfgRaw = localStorage.getItem('s3Config');
+        if (s3CfgRaw) {
+          const cfg = JSON.parse(s3CfgRaw);
+          if (cfg && cfg.enabled) {
+            fileStorageService.init(cfg);
+          }
+        }
+      } catch (e) {
+        console.warn('Re-init S3 config failed:', e);
+      }
       
       // 直接调用 fileStorageService.processFile 进行统一处理
       // 附件强制使用S3上传（如果启用了S3的话）
