@@ -348,7 +348,7 @@ const MemoList = ({
                     ) : (
                       <>
                         {memo.content.length > MAX_CONTENT_LENGTH && !expandedMemos[memo.id] ? (
-                          <div>
+                          <div className="custom-font-content">
                             <ContentRenderer
                               content={memo.content.substring(0, MAX_CONTENT_LENGTH)}
                               activeTag={activeTag}
@@ -364,7 +364,7 @@ const MemoList = ({
                             </div>
                           </div>
                         ) : (
-                          <div>
+                          <div className="custom-font-content">
                             <ContentRenderer
                               content={memo.content}
                               activeTag={activeTag}
