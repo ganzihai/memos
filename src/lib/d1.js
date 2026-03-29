@@ -65,7 +65,7 @@ export class D1DatabaseService {
       const localData = {
         memos: JSON.parse(localStorage.getItem('memos') || '[]'),
         pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
-        themeColor: localStorage.getItem('themeColor') || '#818CF8',
+        themeColor: localStorage.getItem('themeColor') || '#969696',
         darkMode: localStorage.getItem('darkMode') || 'false',
         hitokotoConfig: JSON.parse(localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}'),
         fontConfig: JSON.parse(localStorage.getItem('fontConfig') || '{"selectedFont":"default"}'),
@@ -343,7 +343,7 @@ export class D1DatabaseService {
         CREATE TABLE IF NOT EXISTS user_settings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           pinned_memos TEXT DEFAULT '[]',
-          theme_color TEXT DEFAULT '#818CF8',
+          theme_color TEXT DEFAULT '#969696',
           dark_mode INTEGER DEFAULT 0,
           hitokoto_config TEXT DEFAULT '{"enabled":true,"types":["a","b","c","d","i","j","k"]}',
           font_config TEXT DEFAULT '{"selectedFont":"default"}',

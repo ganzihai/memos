@@ -42,7 +42,7 @@ export async function onRequest(context) {
           .prepare('UPDATE user_settings SET pinned_memos = ?, theme_color = ?, dark_mode = ?, hitokoto_config = ?, font_config = ?, background_config = ?, avatar_config = ?, canvas_config = ?, music_config = ?, s3_config = ?, updated_at = ?')
           .bind(
             JSON.stringify(pinned_memos || []),
-            theme_color || '#818CF8',
+            theme_color || '#969696',
             dark_mode ? 1 : 0,
             JSON.stringify(hitokoto_config || { enabled: true, types: ["a", "b", "c", "d", "i", "j", "k"] }),
             JSON.stringify(font_config || { selectedFont: "default" }),
@@ -60,7 +60,7 @@ export async function onRequest(context) {
           .prepare('INSERT INTO user_settings (pinned_memos, theme_color, dark_mode, hitokoto_config, font_config, background_config, avatar_config, canvas_config, music_config, s3_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .bind(
             JSON.stringify(pinned_memos || []),
-            theme_color || '#818CF8',
+            theme_color || '#969696',
             dark_mode ? 1 : 0,
             JSON.stringify(hitokoto_config || { enabled: true, types: ["a", "b", "c", "d", "i", "j", "k"] }),
             JSON.stringify(font_config || { selectedFont: "default" }),

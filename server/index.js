@@ -330,7 +330,7 @@ app.post('/api/settings', (req, res) => {
     const now = new Date().toISOString();
     const payload = {
       pinned_memos: serializeJsonColumn(pinned_memos, []),
-      theme_color: theme_color || '#818CF8',
+      theme_color: theme_color || '#969696',
   dark_mode: coerceBooleanFlag(dark_mode) ? 1 : 0,
       hitokoto_config: serializeJsonColumn(hitokoto_config, {
         enabled: true,

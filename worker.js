@@ -99,7 +99,7 @@ async function handleInitDatabase(env, headers) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL UNIQUE,
         pinned_memos TEXT DEFAULT '[]',
-        theme_color TEXT DEFAULT '#818CF8',
+        theme_color TEXT DEFAULT '#969696',
         dark_mode INTEGER DEFAULT 0,
         hitokoto_config TEXT DEFAULT '{"enabled":true,"types":["a","b","c","d","i","j","k"]}',
         font_config TEXT DEFAULT '{"selectedFont":"default"}',
@@ -269,7 +269,7 @@ async function handleSettings(request, env, headers) {
           .prepare('UPDATE user_settings SET pinned_memos = ?, theme_color = ?, dark_mode = ?, hitokoto_config = ?, font_config = ?, background_config = ?, updated_at = ? WHERE user_id = ?')
           .bind(
             JSON.stringify(pinned_memos || []),
-            theme_color || '#818CF8',
+            theme_color || '#969696',
             dark_mode ? 1 : 0,
             JSON.stringify(hitokoto_config || { enabled: true, types: ["a", "b", "c", "d", "i", "j", "k"] }),
             JSON.stringify(font_config || { selectedFont: "default" }),
@@ -285,7 +285,7 @@ async function handleSettings(request, env, headers) {
           .bind(
             userId,
             JSON.stringify(pinned_memos || []),
-            theme_color || '#818CF8',
+            theme_color || '#969696',
             dark_mode ? 1 : 0,
             JSON.stringify(hitokoto_config || { enabled: true, types: ["a", "b", "c", "d", "i", "j", "k"] }),
             JSON.stringify(font_config || { selectedFont: "default" }),

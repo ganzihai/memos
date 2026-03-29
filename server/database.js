@@ -41,7 +41,7 @@ export const migrateDatabase = () => {
     CREATE TABLE IF NOT EXISTS user_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pinned_memos TEXT DEFAULT '[]',
-      theme_color TEXT DEFAULT '#818CF8',
+      theme_color TEXT DEFAULT '#969696',
       dark_mode INTEGER DEFAULT 0,
       hitokoto_config TEXT DEFAULT '{"enabled":true,"types":["a","b","c","d","i","j","k"]}',
       font_config TEXT DEFAULT '{"selectedFont":"default"}',

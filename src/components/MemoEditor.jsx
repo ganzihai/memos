@@ -1021,17 +1021,7 @@ const MemoEditor = ({
 
                 {/* 附件上传按钮（修复：原先日渐丢失焦点会导致本组件被直接卸载，使用 onClick 显式 click 隐藏的 input） */}
                 <div className="relative inline-flex items-center justify-center">
-                  <input 
-                    id={attachInputIdRef.current} 
-                    ref={attachInputRef} 
-                    type="file" 
-                    className="hidden" 
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      onAttachInputChange(e);
-                    }} 
-                    title="上传附件"
-                  />
+
                   <button 
                     type="button"
                     onMouseDown={(e) => { 
@@ -1220,6 +1210,19 @@ const MemoEditor = ({
           ) : null}
         </div>
       )}
+
+      {/* 隐藏的文件上传 Input 放到外层，确保哪怕失去焦点被折叠也不会影响选文件 */}
+      <input 
+        id={attachInputIdRef.current} 
+        ref={attachInputRef} 
+        type="file" 
+        className="hidden" 
+        onChange={(e) => {
+          e.stopPropagation();
+          onAttachInputChange(e);
+        }} 
+        title="上传附件"
+      />
     </div>
   );
 };

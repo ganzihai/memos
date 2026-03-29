@@ -139,7 +139,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     const data = {
       memos: localStorage.getItem('memos') || '[]',
       pinnedMemos: localStorage.getItem('pinnedMemos') || '[]',
-      themeColor: localStorage.getItem('themeColor') || '#818CF8',
+      themeColor: localStorage.getItem('themeColor') || '#969696',
       darkMode: localStorage.getItem('darkMode') || 'false',
       hitokotoConfig: localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}',
       fontConfig: localStorage.getItem('fontConfig') || '{"selectedFont":"default"}',
@@ -171,7 +171,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
         if (data.memos && data.pinnedMemos) {
           localStorage.setItem('memos', data.memos);
           localStorage.setItem('pinnedMemos', data.pinnedMemos);
-          localStorage.setItem('themeColor', data.themeColor || '#818CF8');
+          localStorage.setItem('themeColor', data.themeColor || '#969696');
           localStorage.setItem('darkMode', data.darkMode || 'false');
           localStorage.setItem('hitokotoConfig', data.hitokotoConfig || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}');
           localStorage.setItem('fontConfig', data.fontConfig || '{"selectedFont":"default"}');
@@ -569,7 +569,7 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
                       type="text"
                       value={tempColor}
                       onChange={(e) => handleCustomColorChange(e)}
-                      placeholder="#818CF8"
+                      placeholder="#969696"
                       className="flex-1 text-sm"
                     />
                   </div>

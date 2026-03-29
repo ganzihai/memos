@@ -5,7 +5,7 @@ const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [darkMode, setDarkMode] = useState(false);
-  const [themeColor, setThemeColor] = useState('#818CF8');
+  const [themeColor, setThemeColor] = useState('#969696');
   const [currentFont, setCurrentFont] = useState('default');
   const [currentFontSize, setCurrentFontSize] = useState(16);
 

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS memos (
 CREATE TABLE IF NOT EXISTS user_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pinned_memos TEXT DEFAULT '[]',
-  theme_color TEXT DEFAULT '#818CF8',
+  theme_color TEXT DEFAULT '#969696',
   dark_mode INTEGER DEFAULT 0,
   hitokoto_config TEXT DEFAULT '{"enabled":true,"types":["a","b","c","d","i","j","k"]}',
   font_config TEXT DEFAULT '{"selectedFont":"default"}',
@@ -36,4 +36,4 @@ CREATE INDEX IF NOT EXISTS idx_memos_created_at ON memos(created_at);
 
 -- 插入默认用户设置的示例（可选）
 -- INSERT OR IGNORE INTO user_settings (pinned_memos, theme_color, dark_mode, hitokoto_config, font_config, background_config, created_at, updated_at)
--- VALUES ('[]', '#818CF8', 0, '{"enabled":true,"types":["a","b","c","d","i","j","k"]}', '{"selectedFont":"default"}', '{"imageUrl":"","brightness":50,"blur":10}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- VALUES ('[]', '#969696', 0, '{"enabled":true,"types":["a","b","c","d","i","j","k"]}', '{"selectedFont":"default"}', '{"imageUrl":"","brightness":50,"blur":10}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
