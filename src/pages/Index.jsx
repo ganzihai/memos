@@ -966,7 +966,7 @@ const Index = () => {
         e.preventDefault();
         setIsLeftSidebarPinned(!isLeftSidebarPinned);
         setIsRightSidebarPinned(!isRightSidebarPinned);
-        toast.success(isLeftSidebarPinned ? '侧栏已取消固定' : '侧栏已固定');
+        // toast.success(isLeftSidebarPinned ? '侧栏已取消固定' : '侧栏已固定');
       }
 
       // 打开/关闭AI对话
