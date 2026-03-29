@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { D1DatabaseService } from '@/lib/d1';
 import { D1ApiClient } from '@/lib/d1-api';
 import { usePasswordAuth } from './PasswordAuthContext';
@@ -510,8 +510,9 @@ export function SettingsProvider({ children }) {
   // 若配置已启用，则初始化 S3 客户端
         try {
           if (parsedConfig && parsedConfig.enabled) {
-            const svc = require('@/lib/s3Storage').default;
-            svc.init(parsedConfig);
+            import('@/lib/s3Storage').then(mod => {
+              try { mod.default.init(parsedConfig); } catch (e) { console.warn('Init S3 (dynamic import) failed:', e); }
+            }).catch(e => console.warn('Import S3 failed:', e));
           }
         } catch (e) {
           console.warn('Init S3 on load failed:', e);
@@ -671,9 +672,10 @@ export function SettingsProvider({ children }) {
     dispatchDataChanged({ part: 's3' });
   // 若已启用则保证运行时已初始化
     try {
-      const svc = require('@/lib/s3Storage').default;
       if (s3Config && s3Config.enabled) {
-        svc.init(s3Config);
+        import('@/lib/s3Storage').then(mod => {
+          try { mod.default.init(s3Config); } catch (e) { console.warn('Init S3 on change failed:', e); }
+        }).catch(e => console.warn('Import S3 failed:', e));
       }
     } catch (e) {
   // 仅写日志，不打断设置保存
