@@ -40,57 +40,80 @@ export async function onRequest(context) {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     } else if (method === 'POST') {
-      // 创建或更新memo
+      // 创建或更新memo (支持单个对象或数组)
       const body = await request.json();
-      const { memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at } = body;
       
-      if (!memo_id || !content) {
-        return new Response(JSON.stringify({ error: '缺少必要参数' }), {
-          status: 400,
+      const processMemo = async (memoData) => {
+        const { memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at } = memoData;
+        
+        if (!memo_id || !content) {
+          throw new Error('缺少必要参数');
+        }
+        
+        // 检查memo是否已存在
+        const existingMemo = await env.DB
+          .prepare('SELECT * FROM memos WHERE memo_id = ?')
+          .bind(memo_id)
+          .first();
+        
+        if (existingMemo) {
+          // 更新现有memo
+          await env.DB
+            .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, is_public = ?, updated_at = ? WHERE memo_id = ?')
+            .bind(
+              content,
+              JSON.stringify(tags || []),
+              JSON.stringify(backlinks || []),
+              JSON.stringify(audio_clips || []),
+              is_public ? 1 : 0,
+              updated_at || new Date().toISOString(),
+              memo_id
+            )
+            .run();
+        } else {
+          // 插入新memo
+          await env.DB
+            .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(
+              memo_id,
+              content,
+              JSON.stringify(tags || []),
+              JSON.stringify(backlinks || []),
+              JSON.stringify(audio_clips || []),
+              is_public ? 1 : 0,
+              created_at || new Date().toISOString(),
+              updated_at || new Date().toISOString()
+            )
+            .run();
+        }
+      };
+
+      if (Array.isArray(body)) {
+        // 批量处理
+        for (const item of body) {
+          try {
+            await processMemo(item);
+          } catch (e) {
+            console.error('批量处理memo失败:', item.memo_id, e);
+          }
+        }
+        return new Response(JSON.stringify({ success: true, message: '批量Memo保存成功' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
-      }
-      
-      // 检查memo是否已存在
-      const existingMemo = await env.DB
-        .prepare('SELECT * FROM memos WHERE memo_id = ?')
-        .bind(memo_id)
-        .first();
-      
-      if (existingMemo) {
-        // 更新现有memo
-        await env.DB
-          .prepare('UPDATE memos SET content = ?, tags = ?, backlinks = ?, audio_clips = ?, is_public = ?, updated_at = ? WHERE memo_id = ?')
-          .bind(
-            content,
-            JSON.stringify(tags || []),
-            JSON.stringify(backlinks || []),
-            JSON.stringify(audio_clips || []),
-            is_public ? 1 : 0,
-            updated_at || new Date().toISOString(),
-            memo_id
-          )
-          .run();
       } else {
-        // 插入新memo
-        await env.DB
-          .prepare('INSERT INTO memos (memo_id, content, tags, backlinks, audio_clips, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(
-            memo_id,
-            content,
-            JSON.stringify(tags || []),
-            JSON.stringify(backlinks || []),
-            JSON.stringify(audio_clips || []),
-            is_public ? 1 : 0,
-            created_at || new Date().toISOString(),
-            updated_at || new Date().toISOString()
-          )
-          .run();
+        // 单个处理
+        try {
+          await processMemo(body);
+          return new Response(JSON.stringify({ success: true, message: 'Memo保存成功' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
       }
-      
-      return new Response(JSON.stringify({ success: true, message: 'Memo保存成功' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
     } else if (method === 'DELETE') {
       // 删除memo
       const memoId = url.searchParams.get('memoId');
