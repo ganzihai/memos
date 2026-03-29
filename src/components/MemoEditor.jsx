@@ -405,6 +405,10 @@ const MemoEditor = ({
 
   const handleAttachFileSelect = async (file) => {
     if (!file) return;
+    
+    // 立即向用户提供上传反馈，防止无响应的错觉
+    const toastId = toast.loading('正在上传文件...');
+    
     try {
       let url = '';
       
@@ -444,10 +448,10 @@ const MemoEditor = ({
       const isImage = (file.type || '').startsWith('image/');
       const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
       insertSnippetAtCursor(snippet, snippet.length);
-      try { toast.success('附件已插入'); } catch { }
+      toast.success('附件上传成功', { id: toastId });
     } catch (e) {
       console.warn('attach file failed', e);
-      try { toast.error(`附件上传失败: ${e.message || '未知错误'}`); } catch { }
+      toast.error(`附件上传失败: ${e.message || '未知错误'}`, { id: toastId });
     }
   };
 
