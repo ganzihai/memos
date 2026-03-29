@@ -56,7 +56,7 @@ const Header = ({
           className="ml-2 text-lg font-bold transition-colors duration-300"
           style={{ color: themeColor }}
         >
-          杆子日志
+          备忘录
         </span>
       </div>
 

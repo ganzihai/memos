@@ -390,16 +390,26 @@ const MemoEditor = ({
     if (!file) return;
     try {
       let url = '';
-      // 若已配置S3，强制走S3，无论大小
-      try {
-        const res = await fileStorageService.uploadToS3(file, { type: 'file' });
-        url = res?.url || '';
-      } catch (_) {
-        // 回退为 Base64
-        const res = await fileStorageService.uploadToBase64(file, { type: 'file' });
-        url = res?.data || '';
+      
+      // 直接调用 fileStorageService.processFile 进行统一处理
+      // 附件强制使用S3上传（如果启用了S3的话）
+      const res = await fileStorageService.processFile(file, { type: 'file', forceS3: true });
+      
+      if (res) {
+        if (res.storageType === 's3' && res.url) {
+          url = res.url;
+        } else if (res.storageType === 'indexeddb') {
+          // 对于 IndexedDB 存储，我们使用特定的语法来标记
+          url = `idb://${res.id}`;
+        } else if (res.storageType === 'base64' && res.data) {
+          url = res.data;
+        }
       }
-      if (!url) return;
+      
+      if (!url) {
+        throw new Error('未能获取到有效的文件地址');
+      }
+      
       const name = file.name || 'file';
       const isImage = (file.type || '').startsWith('image/');
       const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
@@ -407,7 +417,7 @@ const MemoEditor = ({
       try { toast.success('附件已插入'); } catch { }
     } catch (e) {
       console.warn('attach file failed', e);
-      try { toast.error('附件上传失败'); } catch { }
+      try { toast.error(`附件上传失败: ${e.message || '未知错误'}`); } catch { }
     }
   };
 
@@ -934,7 +944,7 @@ const MemoEditor = ({
                   </svg>
                 </button>
 
-                {/* 附件上传按钮（使用 span 触发 input，避免浏览器阻止程序化点击） */}
+                {/* 附件上传按钮（避免浏览器阻止程序化点击） */}
                 <button
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); /* 阻止失去焦点 */ }}
@@ -947,13 +957,6 @@ const MemoEditor = ({
                   </svg>
                 </button>
                 <input id={attachInputIdRef.current} ref={attachInputRef} type="file" className="sr-only" onChange={onAttachInputChange} />
-                <span 
-                  onMouseDown={(e) => { e.preventDefault(); /* 阻止失去焦点 */ }}
-                  onClick={() => { try { attachInputRef.current?.click(); } catch { } }}
-                  className="ml-2 text-xs text-blue-600 cursor-pointer hover:underline select-none"
-                >
-                  选择文件
-                </span>
 
                 {/* 录音按钮 */}
                 <button

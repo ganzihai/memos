@@ -385,7 +385,7 @@ export function SettingsProvider({ children }) {
           const localData = {
             memos: JSON.parse(localStorage.getItem('memos') || '[]'),
             pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
-            themeColor: localStorage.getItem('themeColor') || '#818CF8',
+            themeColor: localStorage.getItem('themeColor') || '#969696',
             darkMode: localStorage.getItem('darkMode') || 'false',
             hitokotoConfig: JSON.parse(localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}'),
             fontConfig: JSON.parse(localStorage.getItem('fontConfig') || '{"selectedFont":"default"}'),

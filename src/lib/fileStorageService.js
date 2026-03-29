@@ -28,7 +28,7 @@ class FileStorageService {
 
   // 处理文件上传（统一入口）
   async processFile(file, options = {}) {
-    const { type = 'file', onProgress } = options;
+    const { type = 'file', onProgress, forceS3 = false } = options;
     const fileSize = file.size;
     const threshold = this.getSizeThreshold();
 
@@ -38,8 +38,9 @@ class FileStorageService {
       
       let result;
       
-      if (this.isS3Enabled() && fileSize >= threshold) {
-        // 大文件且启用了S3 -> 上传到S3
+      // 如果明确要求 forceS3 或者 (启用了S3 且 文件大小>=阈值)
+      if (this.isS3Enabled() && (forceS3 || fileSize >= threshold)) {
+        // 上传到S3
         result = await this.uploadToS3(file, { type, onProgress });
       } else if (fileSize >= 5 * 1024 * 1024) {
         // 大文件但未启用S3 -> 使用IndexedDB
