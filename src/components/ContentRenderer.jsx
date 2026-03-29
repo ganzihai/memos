@@ -61,8 +61,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
 
   // 渲染markdown文本（不包含标签�?
   const renderMarkdownText = (text) => {
-    // 处理换行�?
-    let processedText = text.replace(/\n/g, '  \n');
+    let processedText = text;
 
     // 保留行首的空格 - 直接使用unicode非断行空格
     processedText = processedText.replace(/^( +)/gm, (match, spaces) => {
