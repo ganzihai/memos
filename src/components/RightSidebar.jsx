@@ -28,7 +28,7 @@ const RightSidebar = ({
               : 'fixed right-0 top-16 z-30 m-4 rounded-2xl shadow-xl border dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm w-80 h-[calc(100vh-8rem)] max-h-[80vh] opacity-0 pointer-events-none translate-x-full'
       }`}
     >
-      <div className={`p-4 flex-1 flex flex-col min-w-[240px] relative ${!isRightSidebarPinned && isRightSidebarHovered ? 'h-full overflow-y-auto' : ''}`}>
+      <div className={`p-4 flex-1 flex flex-col min-w-[240px] relative ${!isRightSidebarPinned && isRightSidebarHovered ? 'h-full' : ''}`}>
         {/* 固定/取消固定按钮 - 画布模式下禁用 */}
         <button
           onClick={() => setIsRightSidebarPinned(!isRightSidebarPinned)}
@@ -48,7 +48,7 @@ const RightSidebar = ({
           )}
         </button>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           <TagManager
             memos={memos}
             activeTag={activeTag}
