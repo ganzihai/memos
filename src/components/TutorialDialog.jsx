@@ -11,7 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
  * - isOpen: boolean 是否打开
  * - onClose: () => void 关闭回调（内部会在关闭时记录本地“已查看”状态）
  */
-const TutorialDialog = ({ isOpen, onClose }) => {
+const TutorialDialog = ({ false, onClose }) => {
 		const { themeColor } = useTheme();
 	const pages = useMemo(() => [
 		{
