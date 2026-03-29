@@ -934,9 +934,10 @@ const MemoEditor = ({
                   </svg>
                 </button>
 
-                {/* 附件上传按钮（使用 label 触发 input，避免浏览器阻止程序化点击） */}
+                {/* 附件上传按钮（使用 span 触发 input，避免浏览器阻止程序化点击） */}
                 <button
                   type="button"
+                  onMouseDown={(e) => { e.preventDefault(); /* 阻止失去焦点 */ }}
                   onClick={() => { try { attachInputRef.current?.click(); } catch { } }}
                   className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                   title="上传附件"
@@ -946,9 +947,13 @@ const MemoEditor = ({
                   </svg>
                 </button>
                 <input id={attachInputIdRef.current} ref={attachInputRef} type="file" className="sr-only" onChange={onAttachInputChange} />
-                <label htmlFor={attachInputIdRef.current} className="ml-2 text-xs text-blue-600 cursor-pointer hover:underline select-none">
+                <span 
+                  onMouseDown={(e) => { e.preventDefault(); /* 阻止失去焦点 */ }}
+                  onClick={() => { try { attachInputRef.current?.click(); } catch { } }}
+                  className="ml-2 text-xs text-blue-600 cursor-pointer hover:underline select-none"
+                >
                   选择文件
-                </label>
+                </span>
 
                 {/* 录音按钮 */}
                 <button
