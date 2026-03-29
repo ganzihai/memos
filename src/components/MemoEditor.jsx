@@ -413,6 +413,7 @@ const MemoEditor = ({
       let url = '';
       
       // 1. 首先尝试使用后端的 /api/upload 接口（依赖 Cloudflare Pages R2 绑定）
+      let apiUploadDenied = false;
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -426,14 +427,31 @@ const MemoEditor = ({
           const result = await uploadRes.json();
           if (result.success && result.url) {
             url = result.url;
+          } else {
+            throw new Error(result.error || 'API上传成功但未返回URL');
           }
+        } else if (uploadRes.status === 404) {
+          console.log('未检测到 /api/upload 路由，降级为前端上传');
+        } else {
+          let errMsg = `后端错误状态码：${uploadRes.status}`;
+          try {
+            const body = await uploadRes.json();
+            if (body.error) errMsg = body.error;
+          } catch(err) {}
+          throw new Error(errMsg);
         }
       } catch (e) {
-        console.log('后端上传接口调用失败，降级为前端直传', e);
+        if (e.message !== 'Failed to fetch' && !e.message.includes('NetworkError')) {
+          apiUploadDenied = true;
+          // 是具体的业务错误或服务端报错，直接抛出，阻断走前台大文件处理导致浏览器彻底卡死
+          throw e;
+        } else {
+          console.log('网络错误或未配置后端，降级为前端直传', e);
+        }
       }
       
-      // 2. 如果后端上传失败，降级到之前的前端上传逻辑
-      if (!url) {
+      // 2. 如果后端上传失败（且不是明确的报错异常），降级到之前的前端上传逻辑
+      if (!url && !apiUploadDenied) {
         // 每次上传前都尝试重新初始化，确保拿到最新的配置
         try {
           const s3CfgRaw = localStorage.getItem('s3Config');
@@ -1013,7 +1031,7 @@ const MemoEditor = ({
                       e.stopPropagation();
                       onAttachInputChange(e);
                     }} 
-                    onMouseDown={(e) => { e.preventDefault(); /* 阻止失去焦点 */ }}
+                    onMouseDown={(e) => { e.stopPropagation(); /* 阻止冒泡避免触发外部容器的MouseDown事件，且保留默认行为以弹出选择器 */ }}
                     title="上传附件"
                   />
                   <div className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors pointer-events-none">
