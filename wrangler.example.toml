@@ -29,4 +29,4 @@ routes = [
   { pattern = "n.ganzi.fun", custom_domain = true },
   { pattern = "api.n.ganzi.fun/*", zone_name = "n.ganzi.fun" }
 ]
-]
+ ]
