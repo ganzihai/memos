@@ -489,7 +489,7 @@ const MemoList = ({
                       <div className="mt-3 border rounded-lg border-gray-200 dark:border-gray-700 overflow-hidden">
                         <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex items-center text-xs font-medium text-gray-500 dark:text-gray-400">
                           <Paperclip className="w-3.5 h-3.5 mr-1.5" />
-                          Attachments ({attachments.length})
+                          附件 ({attachments.length})
                         </div>
                         <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white dark:bg-gray-800">
                           {attachments.map((att, idx) => {
