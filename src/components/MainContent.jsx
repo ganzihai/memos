@@ -70,13 +70,7 @@ const MainContent = ({
     <div className="flex-1 flex flex-col w-full relative h-full lg:h-full">
 
       <div ref={memosContainerRef} className="flex-1 overflow-y-auto scrollbar-hidden relative">
-        <div className={`w-full ${
-          isLeftSidebarPinned && isRightSidebarPinned
-            ? 'lg:max-w-4xl lg:mx-auto'
-            : isLeftSidebarPinned || isRightSidebarPinned
-              ? 'lg:max-w-4xl lg:mx-auto'
-              : 'lg:max-w-4xl lg:mx-auto px-4'
-        } px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6`}>
+        <div className="w-full lg:max-w-4xl lg:mx-auto px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6">
           <Header
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
