@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
@@ -62,6 +62,8 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   // 渲染markdown文本（不包含标签�?
   const renderMarkdownText = (text) => {
     let processedText = text;
+
+    processedText = processedText.replace(/\\n/g, '\n');
 
     // 保留行首的空格 - 直接使用unicode非断行空格
     processedText = processedText.replace(/^( +)/gm, (match, spaces) => {
@@ -164,6 +166,20 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
 
   const parts = parseContent(content);
   const { darkMode } = useTheme();
+
+  useEffect(() => {
+    if (!window.hljs && !window.__hljsLoading) {
+      window.__hljsLoading = true;
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js';
+      s.onload = () => { window.__hljsLoading = false; };
+      document.head.appendChild(s);
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
+      document.head.appendChild(l);
+    }
+  }, []);
 
   return (
     <div className={`prose prose-sm prose-p:my-1 prose-h1:my-1 prose-h2:my-1 prose-h3:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 max-w-none dark:prose-invert ${currentFont !== 'default' ? 'custom-font-content' : ''}`}>
@@ -304,6 +320,31 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                           }
                           return <img {...props} />;
                         },
+                        code: ({node, inline, className, children, ...props}) => {
+                          const raw = String(children || '');
+                          const text = raw.replace(/\\n/g, '\n');
+                          if (inline) {
+                            return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
+                          }
+                          const m = /language-([\w-]+)/.exec(className || '');
+                          const lang = m ? m[1] : null;
+                          let html = '';
+                          if (window.hljs) {
+                            if (lang) {
+                              try { html = window.hljs.highlight(text, { language: lang }).value; } catch { html = window.hljs.highlightAuto(text).value; }
+                            } else {
+                              html = window.hljs.highlightAuto(text).value;
+                            }
+                          }
+                          if (html) {
+                            return (
+                              <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
+                            );
+                          }
+                          return (
+                            <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code {...props}>{text}</code></pre>
+                          );
+                        },
                       }}
                       remarkPlugins={[remarkEmojiShortcode]}
                       rehypePlugins={[]}
@@ -399,6 +440,31 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                                   );
                                 }
                                 return <img {...props} />;
+                              },
+                              code: ({node, inline, className, children, ...props}) => {
+                                const raw = String(children || '');
+                                const text = raw.replace(/\\n/g, '\n');
+                                if (inline) {
+                                  return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
+                                }
+                                const m = /language-([\w-]+)/.exec(className || '');
+                                const lang = m ? m[1] : null;
+                                let html = '';
+                                if (window.hljs) {
+                                  if (lang) {
+                                    try { html = window.hljs.highlight(text, { language: lang }).value; } catch { html = window.hljs.highlightAuto(text).value; }
+                                  } else {
+                                    html = window.hljs.highlightAuto(text).value;
+                                  }
+                                }
+                                if (html) {
+                                  return (
+                                    <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
+                                  );
+                                }
+                                return (
+                                  <pre className="rounded bg-gray-100 dark:bg-gray-900 overflow-x-auto"><code {...props}>{text}</code></pre>
+                                );
                               },
                             }}
                             remarkPlugins={[remarkEmojiShortcode]}
