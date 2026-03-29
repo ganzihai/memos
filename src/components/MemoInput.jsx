@@ -130,10 +130,22 @@ async function parseMemosFromNdjson(jsonFile) {
       try { return JSON.parse(l); } catch { return null; }
     }).filter(Boolean);
   }
-  const toISO = (seconds) => {
-    if (seconds == null) return new Date().toISOString();
-    const ms = Number(seconds) * 1000;
-    return new Date(ms).toISOString();
+  const safeToISO = (value) => {
+    if (value == null) return new Date().toISOString();
+    // number-like string or number
+    const num = typeof value === 'number' ? value : (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value) ? Number(value) : NaN);
+    if (Number.isFinite(num)) {
+      // auto-detect seconds vs milliseconds
+      const ms = num > 1e12 ? num : Math.floor(num * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+    // try parsing ISO/date string
+    if (typeof value === 'string') {
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+    return new Date().toISOString();
   };
   return items
     .filter((row) => !row.row_status || String(row.row_status).toUpperCase() === 'NORMAL')
@@ -157,8 +169,12 @@ async function parseMemosFromNdjson(jsonFile) {
           tags = extracted;
         } catch {}
       }
-      const createdAt = row.created_ts ? toISO(row.created_ts) : (row.createdAt || new Date().toISOString());
-      const updatedAt = row.updated_ts ? toISO(row.updated_ts) : (row.updatedAt || createdAt);
+      const createdAt = row.created_ts != null
+        ? safeToISO(row.created_ts)
+        : (row.createdAt != null ? safeToISO(row.createdAt) : new Date().toISOString());
+      const updatedAt = row.updated_ts != null
+        ? safeToISO(row.updated_ts)
+        : (row.updatedAt != null ? safeToISO(row.updatedAt) : createdAt);
       const memoObj = {
         id: `memos-${id}`,
         content,
