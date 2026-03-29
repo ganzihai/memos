@@ -140,6 +140,27 @@ async function parseMemosFromNdjson(jsonFile) {
       const d = new Date(ms);
       if (!isNaN(d.getTime())) return d.toISOString();
     }
+    // "YYYY-MM-DD HH:MM:SS" -> ISO
+    if (typeof value === 'string') {
+      const m = value.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+      if (m) {
+        const [_, y, mo, d, h, mi, s] = m;
+        const dt = new Date(
+          Number(y),
+          Number(mo) - 1,
+          Number(d),
+          Number(h),
+          Number(mi),
+          Number(s),
+          0
+        );
+        if (!isNaN(dt.getTime())) return dt.toISOString();
+        // fallback: replace space with 'T'
+        const isoCandidate = `${y}-${mo}-${d}T${h}:${mi}:${s}`;
+        const d2 = new Date(isoCandidate);
+        if (!isNaN(d2.getTime())) return d2.toISOString();
+      }
+    }
     // try parsing ISO/date string
     if (typeof value === 'string') {
       const d = new Date(value);
