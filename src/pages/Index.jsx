@@ -551,8 +551,15 @@ const Index = () => {
 
   // 统一筛选：标签 / 日期 / 搜索 / 认证状态
   useEffect(() => {
-    // 1) 基础：采用置顶 + 普通的并集，优先显示置顶（作为回退列表）
+    // 1) 基础：采用置顶 + 普通的并集，优先显示置顶（作为回退列表），并去重
     let base = [...pinnedMemos, ...memos];
+    const seen = new Set();
+    base = base.filter(m => {
+      const id = String(m.id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 
     // 未登录用户只能看到公开的memo
     if (!isAuthenticated) {
@@ -648,8 +655,16 @@ const Index = () => {
             updatedAt: new Date().toISOString(),
             lastModified: new Date().toISOString()
           };
-          setPinnedMemos([pinnedMemo, ...pinnedMemos]);
-          setMemos(memos.filter(memo => memo.id !== memoId));
+          const nextPinned = [pinnedMemo, ...pinnedMemos];
+          const nextMemos = memos.filter(memo => memo.id !== memoId);
+          setPinnedMemos(nextPinned);
+          setMemos(nextMemos);
+          localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+          localStorage.setItem('memos', JSON.stringify(nextMemos));
+          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'memo.pin', id: memoId } })); } catch {}
+          if (isAuthenticated && _scheduleCloudSync) {
+            try { _scheduleCloudSync('memo-pin'); } catch {}
+          }
         }
         break;
       case 'unpin':
@@ -657,8 +672,16 @@ const Index = () => {
         if (memoToUnpin) {
           const unpinnedMemo = { ...memoToUnpin, isPinned: false, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
           delete unpinnedMemo.pinnedAt;
-          setMemos([unpinnedMemo, ...memos]);
-          setPinnedMemos(pinnedMemos.filter(memo => memo.id !== memoId));
+          const nextPinned = pinnedMemos.filter(memo => memo.id !== memoId);
+          const nextMemos = [unpinnedMemo, ...memos];
+          setMemos(nextMemos);
+          setPinnedMemos(nextPinned);
+          localStorage.setItem('memos', JSON.stringify(nextMemos));
+          localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'memo.unpin', id: memoId } })); } catch {}
+          if (isAuthenticated && _scheduleCloudSync) {
+            try { _scheduleCloudSync('memo-unpin'); } catch {}
+          }
         }
         break;
       case 'edit':
