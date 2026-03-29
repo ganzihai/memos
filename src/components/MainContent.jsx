@@ -69,9 +69,9 @@ const MainContent = ({
   return (
     <div className={`flex-1 flex flex-col w-full relative h-full lg:h-full ${
       isLeftSidebarPinned && isRightSidebarPinned
-        ? 'lg:max-w-2xl lg:mx-auto'
+        ? 'lg:max-w-4xl lg:mx-auto'
         : isLeftSidebarPinned || isRightSidebarPinned
-          ? 'lg:max-w-3xl lg:mx-auto'
+          ? 'lg:max-w-4xl lg:mx-auto'
           : 'lg:max-w-4xl lg:mx-auto px-4'
     }`}>
 
