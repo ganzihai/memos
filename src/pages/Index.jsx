@@ -410,11 +410,12 @@ const Index = () => {
 
   // 保存数据到localStorage - 优化：减少不必要的同步触发
   useEffect(() => {
+    if (isInitialLoad) return; // 初始加载时不保存，避免覆盖已有数据
     localStorage.setItem('memos', JSON.stringify(memos));
     localStorage.setItem('pinnedMemos', JSON.stringify(pinnedMemos));
     // 🔧 只在数据真正变化时通知，避免频繁同步导致冲突
     // 去掉自动触发，改为在关键操作时手动触发
-  }, [memos, pinnedMemos]);
+  }, [memos, pinnedMemos, isInitialLoad]);
 
   // 保存侧栏固定状态到localStorage - 画布模式下不保存
   useEffect(() => {
