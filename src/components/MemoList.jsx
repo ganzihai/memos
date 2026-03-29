@@ -540,7 +540,8 @@ const MemoList = ({
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+          );
+        })}
             </div>
           </div>
         )}
