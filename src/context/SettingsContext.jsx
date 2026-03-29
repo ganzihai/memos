@@ -16,7 +16,7 @@ export function useSettings() {
 export function SettingsProvider({ children }) {
   const { isAuthenticated } = usePasswordAuth();
   const [hitokotoConfig, setHitokotoConfig] = useState({
-    enabled: true,
+    enabled: false,
     types: ['a', 'b', 'c', 'd', 'i', 'j', 'k'] // 默认全部类型
   });
   const [fontConfig, setFontConfig] = useState({
