@@ -141,7 +141,7 @@ const MemoList = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 标题区域 */}
-      <div className="p-3 sm:p-4 lg:p-6 pb-0">
+      <div className="p-3 sm:p-4 lg:p-6 pb-0 hidden">
         <div className="flex items-center justify-between">
           <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 flex items-center flex-shrink-0">
             <Clock
