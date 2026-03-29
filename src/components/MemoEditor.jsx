@@ -238,7 +238,7 @@ const MemoEditor = ({
       if (textareaRef.current) {
         textareaRef.current.focus();
         const pos = start + caretOffsetInSnippet;
-        try { textareaRef.current.setSelectionRange(pos, pos); } catch {}
+        try { textareaRef.current.setSelectionRange(pos, pos); } catch { }
       }
       // 调整高度
       adjustHeight();
@@ -267,7 +267,7 @@ const MemoEditor = ({
       if (textareaRef.current) {
         textareaRef.current.focus();
         const pos = start + (caretOffsetFromStart ?? snippet.length);
-        try { textareaRef.current.setSelectionRange(pos, pos); } catch {}
+        try { textareaRef.current.setSelectionRange(pos, pos); } catch { }
       }
       adjustHeight();
     }, 0);
@@ -304,7 +304,7 @@ const MemoEditor = ({
             loading="lazy"
             onError={(e) => {
               const order = ['png', 'webp', 'gif'];
-              const curExt = (e.currentTarget.src.match(/\.(\w+)(?:\?|#|$)/) || [,''])[1];
+              const curExt = (e.currentTarget.src.match(/\.(\w+)(?:\?|#|$)/) || [, ''])[1];
               const rest = order.filter(x => x !== curExt);
               for (const ext of rest) {
                 const candidate = buildEmojiUrl(cat, name, ext);
@@ -380,10 +380,10 @@ const MemoEditor = ({
       if (s3CfgRaw) {
         const cfg = JSON.parse(s3CfgRaw);
         if (cfg && cfg.enabled) {
-          try { fileStorageService.init(cfg); } catch {}
+          try { fileStorageService.init(cfg); } catch { }
         }
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const handleAttachFileSelect = async (file) => {
@@ -404,29 +404,29 @@ const MemoEditor = ({
       const isImage = (file.type || '').startsWith('image/');
       const snippet = isImage ? `![${name}](${url})` : `[${name}](${url})`;
       insertSnippetAtCursor(snippet, snippet.length);
-      try { toast.success('附件已插入'); } catch {}
+      try { toast.success('附件已插入'); } catch { }
     } catch (e) {
       console.warn('attach file failed', e);
-      try { toast.error('附件上传失败'); } catch {}
+      try { toast.error('附件上传失败'); } catch { }
     }
   };
 
   const onAttachInputChange = (e) => {
     const f = e.target.files && e.target.files[0];
     if (f) handleAttachFileSelect(f);
-    try { e.target.value = ''; } catch {}
+    try { e.target.value = ''; } catch { }
   };
 
   const cleanupRecording = () => {
-    try { cancelAnimationFrame(rafRef.current); } catch {}
+    try { cancelAnimationFrame(rafRef.current); } catch { }
     rafRef.current = null;
-    try { audioCtxRef.current && audioCtxRef.current.close(); } catch {}
+    try { audioCtxRef.current && audioCtxRef.current.close(); } catch { }
     audioCtxRef.current = null;
     analyserRef.current = null;
     dataArrayRef.current = null;
     if (mediaStreamRef.current) {
       for (const track of mediaStreamRef.current.getTracks()) {
-        try { track.stop(); } catch {}
+        try { track.stop(); } catch { }
       }
       mediaStreamRef.current = null;
     }
@@ -482,7 +482,7 @@ const MemoEditor = ({
             const file = new File([blob], `memo_record_${Date.now()}.${ext}`, { type: blob.type || 'audio/webm' });
             const durationMs = currentDurationMs;
             try {
-              try { fileStorageService.init((JSON.parse(localStorage.getItem('s3Config')||'{}'))); } catch {}
+              try { fileStorageService.init((JSON.parse(localStorage.getItem('s3Config') || '{}'))); } catch { }
               const meta = await fileStorageService.processFile(file, { type: 'audio' });
               const clip = { ...meta, durationMs, createdAt: new Date().toISOString(), previewUrl: URL.createObjectURL(blob) };
               onAddAudioClip?.(currentMemoId || null, clip);
@@ -502,10 +502,10 @@ const MemoEditor = ({
       } catch (err) {
         console.error('getUserMedia failed:', err);
         setHasMicPermission(false);
-        try { await navigator.mediaDevices.getUserMedia({ audio: true }); setHasMicPermission(true); } catch {}
+        try { await navigator.mediaDevices.getUserMedia({ audio: true }); setHasMicPermission(true); } catch { }
       }
     } else {
-      try { mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive' && mediaRecorderRef.current.stop(); } catch {}
+      try { mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive' && mediaRecorderRef.current.stop(); } catch { }
     }
   };
 
@@ -515,12 +515,12 @@ const MemoEditor = ({
     const mr = mediaRecorderRef.current;
     if (!mr) return;
     if (!isPaused) {
-      try { mr.pause(); } catch {}
+      try { mr.pause(); } catch { }
       if (recordStartAt) setAccumulatedMs(prev => prev + (Date.now() - recordStartAt));
       setRecordStartAt(null);
       setIsPaused(true);
     } else {
-      try { mr.resume(); } catch {}
+      try { mr.resume(); } catch { }
       setRecordStartAt(Date.now());
       setIsPaused(false);
     }
@@ -562,11 +562,11 @@ const MemoEditor = ({
             try {
               const restored = await fileStorageService.restoreFile(clip);
               if (restored && restored.data) next[key] = restored.data;
-            } catch {}
+            } catch { }
           }
         }
         setEditorClipUrls(next);
-      } catch {}
+      } catch { }
     };
     resolve();
   }, [JSON.stringify(typeof audioClips === 'object' ? audioClips : [])]);
@@ -832,19 +832,19 @@ const MemoEditor = ({
       {(showCharCount || onSubmit) && (
         <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 min-h-[32px] rounded-b-lg">
           {/* 未聚焦时显示一言 */}
-              {!(isFocused || isRecording) && hitokotoConfig.enabled ? (
-                <a
-                  className={cn(
-                    "flex-1 text-center text-xs text-gray-500 truncate px-2 transition-colors duration-300",
-                    currentFont !== 'default' && "custom-font-content"
-                  )}
-                  style={{
-                    '--hover-color': 'var(--theme-color)',
-                  }}
-                  onMouseEnter={(e) => e.target.style.color = 'var(--theme-color)'}
-                  onMouseLeave={(e) => e.target.style.color = ''}
-                >
-                  {hitokoto.text}
+          {!(isFocused || isRecording) && hitokotoConfig.enabled ? (
+            <a
+              className={cn(
+                "flex-1 text-center text-xs text-gray-500 truncate px-2 transition-colors duration-300",
+                currentFont !== 'default' && "custom-font-content"
+              )}
+              style={{
+                '--hover-color': 'var(--theme-color)',
+              }}
+              onMouseEnter={(e) => e.target.style.color = 'var(--theme-color)'}
+              onMouseLeave={(e) => e.target.style.color = ''}
+            >
+              {hitokoto.text}
             </a>
           ) : !(isFocused || isRecording) && !hitokotoConfig.enabled ? (
             <div className="flex-1"></div>
@@ -901,8 +901,8 @@ const MemoEditor = ({
                 >
                   {/* 简洁链路图标 */}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10 14a5 5 0 0 1 0-7.07l1.94-1.94a5 5 0 0 1 7.07 7.07l-1.25 1.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <path d="M14 10a5 5 0 0 1 0 7.07l-1.94 1.94a5 5 0 0 1-7.07-7.07l1.25-1.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M10 14a5 5 0 0 1 0-7.07l1.94-1.94a5 5 0 0 1 7.07 7.07l-1.25 1.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M14 10a5 5 0 0 1 0 7.07l-1.94 1.94a5 5 0 0 1-7.07-7.07l1.25-1.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </button>
 
@@ -937,12 +937,12 @@ const MemoEditor = ({
                 {/* 附件上传按钮（使用 label 触发 input，避免浏览器阻止程序化点击） */}
                 <button
                   type="button"
-                  onClick={() => { try { attachInputRef.current?.click(); } catch {} }}
+                  onClick={() => { try { attachInputRef.current?.click(); } catch { } }}
                   className="inline-flex items-center justify-center h-7 px-2 rounded-md text-gray-600 bg-white hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                   title="上传附件"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 7v10a5 5 0 0 0 10 0V7a3 3 0 0 0-6 0v9a1 1 0 0 0 2 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M7 7v10a5 5 0 0 0 10 0V7a3 3 0 0 0-6 0v9a1 1 0 0 0 2 0V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </button>
                 <input id={attachInputIdRef.current} ref={attachInputRef} type="file" className="sr-only" onChange={onAttachInputChange} />
@@ -1007,24 +1007,24 @@ const MemoEditor = ({
                         .filter(m => !(Array.isArray(backlinks) && backlinks.includes(m.id)))
                         .slice(0, 50)
                         .map(m => (
-                        <button
-                          key={m.id}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handlePickBacklink(m.id); }}
-                             
-                        >
-                          <div className="truncate whitespace-nowrap overflow-hidden text-ellipsis">
-                            {renderInlineWithEmoji((m.content?.replace(/\n/g, ' ') || '暂无内容'))}
-                          </div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">{new Date(m.updatedAt || m.createdAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric' })}</div>
-                        </button>
-                      ))}
+                          <button
+                            key={m.id}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handlePickBacklink(m.id); }}
+
+                          >
+                            <div className="truncate whitespace-nowrap overflow-hidden text-ellipsis">
+                              {renderInlineWithEmoji((m.content?.replace(/\n/g, ' ') || '暂无内容'))}
+                            </div>
+                            <div className="text-[11px] text-gray-400 mt-0.5">{new Date(m.updatedAt || m.createdAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric' })}</div>
+                          </button>
+                        ))}
                       {(memosList || [])
                         .filter(m => m.id !== currentMemoId)
                         .filter(m => !(Array.isArray(backlinks) && backlinks.includes(m.id)))
                         .length === 0 && (
-                        <div className="px-3 py-6 text-center text-xs text-gray-500 dark:text-gray-400">暂无可选Memo</div>
-                      )}
+                          <div className="px-3 py-6 text-center text-xs text-gray-500 dark:text-gray-400">暂无可选Memo</div>
+                        )}
                     </div>
                   </div>
                 )}
