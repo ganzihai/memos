@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [themeColor, setThemeColor] = useState('#818CF8');
   const [currentFont, setCurrentFont] = useState('default');
   const [currentFontSize, setCurrentFontSize] = useState(16);
