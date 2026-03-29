@@ -33,7 +33,7 @@ const Header = ({
   };
 
   return (
-    <div className="flex items-center justify-between p-4 bg-transparent">
+    <div className="flex items-center justify-between py-4 bg-transparent">
       {/* 左侧：汉堡菜单按钮（移动端）+ Logo */}
       <div className="flex items-center">
         {/* 汉堡菜单按钮 - 仅在移动端显示 */}
