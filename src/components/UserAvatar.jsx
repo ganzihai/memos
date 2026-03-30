@@ -87,7 +87,7 @@ const UserAvatar = ({ onOpenSettings }) => {
               <img
                 src={getAvatarUrl()}
                 alt={getDisplayName()}
-                className="w-full h-full object-cover"
+                className="w-1/2 h-1/2 object-cover rounded-full"
                 onError={(e) => {
                   e.target.style.display = 'none';
                   e.target.nextSibling.style.display = 'flex';

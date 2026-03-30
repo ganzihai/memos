@@ -205,14 +205,15 @@ const MemoList = ({
 
       <div className="flex-1 mobile-memos-container lg:mobile-memos-container-disabled min-h-[250px]">
     {memos.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 py-10">
+          <div className="flex-1 flex items-center justify-center text-gray-500">
             <div className="text-center">
               <p>还没有记录任何想法</p>
               <p className="text-sm mt-2">在顶部输入框写下你的第一个想法吧</p>
             </div>
           </div>
         ) : (
-          <div className="space-y-4 pb-4">
+          <div className="flex-1 overflow-y-auto scrollbar-hidden">
+            <div className="space-y-4 pb-4">
       {memos.map(memo => {
         const { attachments, newContent } = extractAttachments(memo.content);
         return (
