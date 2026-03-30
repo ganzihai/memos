@@ -212,8 +212,7 @@ const MemoList = ({
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto scrollbar-hidden">
-            <div className="space-y-4 pb-4">
+          <div className="space-y-4 pb-4">
       {memos.map(memo => {
         const { attachments, newContent } = extractAttachments(memo.content);
         return (
@@ -542,7 +541,6 @@ const MemoList = ({
                 </Card>
           );
         })}
-            </div>
           </div>
         )}
 
