@@ -107,6 +107,9 @@ export function PasswordAuthProvider({ children }) {
           // 存储认证状态和密码（用于会话持久化）
           localStorage.setItem('passwordAuth', 'authenticated');
           localStorage.setItem('storedPassword', password);
+          // 登录后自动开启云同步，确保数据能同步下来
+          localStorage.setItem('cloudSyncEnabled', 'true');
+          sessionStorage.setItem('justLoggedIn', 'true');
           return { success: true };
         } else {
           return { success: false, message: data.message || '密码错误' };

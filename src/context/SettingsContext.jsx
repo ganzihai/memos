@@ -719,10 +719,53 @@ export function SettingsProvider({ children }) {
         const pinned = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
         const hasLocal = (Array.isArray(memos) && memos.length > 0) || (Array.isArray(pinned) && pinned.length > 0);
 
+        // 如果用户已登录，且本地没有明确禁用云同步，则确保开启云同步
+        let currentCloudSyncEnabled = cloudSyncEnabled;
+        const savedSyncConfig = localStorage.getItem('cloudSyncEnabled');
+        if (isAuthenticated && savedSyncConfig !== 'false' && !cloudSyncEnabled) {
+          localStorage.setItem('cloudSyncEnabled', 'true');
+          setCloudSyncEnabled(true);
+          currentCloudSyncEnabled = true;
+        }
+
+        // 如果明确是刚登录（通过 sessionStorage 判断），强制开启云同步
+        if (isAuthenticated && sessionStorage.getItem('justLoggedIn') === 'true') {
+          sessionStorage.removeItem('justLoggedIn');
+          localStorage.setItem('cloudSyncEnabled', 'true');
+          setCloudSyncEnabled(true);
+          currentCloudSyncEnabled = true;
+        }
+
         if (hasLocal) {
-          // 🔧 修复：本地有数据时不要被远端无条件覆盖
+          // 如果用户刚登录，应该从远端拉取一次配置，确保多端设置一致
+          if (isAuthenticated) {
+            try {
+              const res = await D1ApiClient.restoreUserData();
+              if (res?.success && res.data?.settings) {
+                const settings = res.data.settings;
+                if (settings.theme_color) { localStorage.setItem('themeColor', settings.theme_color); setThemeColor(settings.theme_color); }
+                if (settings.dark_mode !== null) localStorage.setItem('darkMode', settings.dark_mode.toString());
+                if (settings.hitokoto_config) { localStorage.setItem('hitokotoConfig', settings.hitokoto_config); try { setHitokotoConfig(JSON.parse(settings.hitokoto_config)); } catch {} }
+                if (settings.font_config) { localStorage.setItem('fontConfig', settings.font_config); try { setFontConfig(JSON.parse(settings.font_config)); } catch {} }
+                if (settings.background_config) { localStorage.setItem('backgroundConfig', settings.background_config); try { setBackgroundConfig(JSON.parse(settings.background_config)); } catch {} }
+                if (settings.avatar_config) { localStorage.setItem('avatarConfig', settings.avatar_config); try { setAvatarConfig(JSON.parse(settings.avatar_config)); } catch {} }
+                if (settings.canvas_config) localStorage.setItem('canvasState', settings.canvas_config);
+                if (settings.music_config) { localStorage.setItem('musicConfig', settings.music_config); try { setMusicConfig(JSON.parse(settings.music_config)); } catch {} }
+                if (settings.s3_config) {
+                  localStorage.setItem('s3Config', settings.s3_config);
+                  try { setS3Config(JSON.parse(settings.s3_config)); } catch {}
+                }
+                // 通知应用重新加载设置
+                try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'restore.settings' } })); } catch {}
+              }
+            } catch (e) {
+              console.warn('拉取远端设置失败', e);
+            }
+          }
+
+          // 本地有数据时不要被远端无条件覆盖
           // 而是进行智能合并，保留本地更新的数据
-          if (isAuthenticated && cloudSyncEnabled) {
+          if (isAuthenticated && currentCloudSyncEnabled) {
             // 对于认证用户，执行合并同步而不是覆盖同步
             scheduleSync('startup-merge');
           }
@@ -762,14 +805,14 @@ export function SettingsProvider({ children }) {
 
           if (res.data?.settings) {
             if (res.data.settings.pinned_memos) localStorage.setItem('pinnedMemos', res.data.settings.pinned_memos);
-            if (res.data.settings.theme_color) localStorage.setItem('themeColor', res.data.settings.theme_color);
+            if (res.data.settings.theme_color) { localStorage.setItem('themeColor', res.data.settings.theme_color); setThemeColor(res.data.settings.theme_color); }
             if (res.data.settings.dark_mode !== null) localStorage.setItem('darkMode', res.data.settings.dark_mode.toString());
-            if (res.data.settings.hitokoto_config) localStorage.setItem('hitokotoConfig', res.data.settings.hitokoto_config);
-            if (res.data.settings.font_config) localStorage.setItem('fontConfig', res.data.settings.font_config);
-            if (res.data.settings.background_config) localStorage.setItem('backgroundConfig', res.data.settings.background_config);
-            if (res.data.settings.avatar_config) localStorage.setItem('avatarConfig', res.data.settings.avatar_config);
+            if (res.data.settings.hitokoto_config) { localStorage.setItem('hitokotoConfig', res.data.settings.hitokoto_config); try { setHitokotoConfig(JSON.parse(res.data.settings.hitokoto_config)); } catch {} }
+            if (res.data.settings.font_config) { localStorage.setItem('fontConfig', res.data.settings.font_config); try { setFontConfig(JSON.parse(res.data.settings.font_config)); } catch {} }
+            if (res.data.settings.background_config) { localStorage.setItem('backgroundConfig', res.data.settings.background_config); try { setBackgroundConfig(JSON.parse(res.data.settings.background_config)); } catch {} }
+            if (res.data.settings.avatar_config) { localStorage.setItem('avatarConfig', res.data.settings.avatar_config); try { setAvatarConfig(JSON.parse(res.data.settings.avatar_config)); } catch {} }
             if (res.data.settings.canvas_config) localStorage.setItem('canvasState', res.data.settings.canvas_config);
-            if (res.data.settings.music_config) localStorage.setItem('musicConfig', res.data.settings.music_config);
+            if (res.data.settings.music_config) { localStorage.setItem('musicConfig', res.data.settings.music_config); try { setMusicConfig(JSON.parse(res.data.settings.music_config)); } catch {} }
             if (res.data.settings.s3_config) {
               localStorage.setItem('s3Config', res.data.settings.s3_config);
               try { setS3Config(JSON.parse(res.data.settings.s3_config)); } catch {}
