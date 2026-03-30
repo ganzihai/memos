@@ -107,7 +107,7 @@ const UserAvatar = ({ onOpenSettings }) => {
         )}
       </button>
 
-      {/* Beta badge */}
+      {/* Beta badge
       {cloudSyncEnabled && (
         <Badge
           variant="secondary"
@@ -115,7 +115,7 @@ const UserAvatar = ({ onOpenSettings }) => {
         >
           β
         </Badge>
-      )}
+      )} */}
 
       {/* 用户下拉菜单 - 只有已认证时才显示 */}
       {isAuthenticated && isDropdownOpen && (
