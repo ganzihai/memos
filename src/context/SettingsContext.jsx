@@ -104,7 +104,7 @@ export function SettingsProvider({ children }) {
           tags: JSON.parse(memo.tags || '[]'),
           backlinks: JSON.parse(memo.backlinks || '[]'),
           audioClips: JSON.parse(memo.audio_clips || '[]'),
-          is_public: memo.is_public ? true : false,
+          is_public: typeof memo.is_public === 'boolean' ? memo.is_public : (memo.is_public === 1),
           timestamp: memo.created_at,
           lastModified: memo.updated_at,
           createdAt: memo.created_at,
@@ -194,7 +194,7 @@ export function SettingsProvider({ children }) {
             tags: JSON.parse(m.tags || '[]'),
             backlinks: JSON.parse(m.backlinks || '[]'),
             audio_clips: JSON.parse(m.audio_clips || '[]'),
-            is_public: m.is_public ? true : false,
+            is_public: typeof m.is_public === 'boolean' ? m.is_public : (m.is_public === 1),
             created_at: m.created_at,
             updated_at: m.updated_at
           }));
@@ -210,7 +210,7 @@ export function SettingsProvider({ children }) {
             tags: JSON.parse(m.tags || '[]'),
             backlinks: JSON.parse(m.backlinks || '[]'),
             audio_clips: JSON.parse(m.audio_clips || '[]'),
-            is_public: m.is_public ? true : false,
+            is_public: typeof m.is_public === 'boolean' ? m.is_public : (m.is_public === 1),
             created_at: m.created_at,
             updated_at: m.updated_at
           }));
@@ -303,7 +303,7 @@ export function SettingsProvider({ children }) {
                 tags: cm.tags || [],
                 backlinks: cm.backlinks || [],
                 audioClips: cm.audio_clips || pm.audioClips || [],
-                is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
+                is_public: typeof cm.is_public === 'boolean' ? cm.is_public : (cm.is_public === 1), // 🔧 添加is_public字段映射
                 updatedAt: cm.updated_at,
                 lastModified: cm.updated_at
               });
@@ -322,7 +322,7 @@ export function SettingsProvider({ children }) {
               tags: cm.tags || [],
               backlinks: cm.backlinks || [],
               audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : [],
-              is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
+              is_public: typeof cm.is_public === 'boolean' ? cm.is_public : (cm.is_public === 1), // 🔧 添加is_public字段映射
               createdAt: cm.created_at,
               updatedAt: cm.updated_at,
               timestamp: cm.created_at,
@@ -339,7 +339,7 @@ export function SettingsProvider({ children }) {
                 tags: cm.tags || [],
                 backlinks: cm.backlinks || [],
                 audioClips: Array.isArray(cm.audio_clips) ? cm.audio_clips : (Array.isArray(lm.audioClips) ? lm.audioClips : []),
-                is_public: cm.is_public ? true : false, // 🔧 添加is_public字段映射
+                is_public: typeof cm.is_public === 'boolean' ? cm.is_public : (cm.is_public === 1), // 🔧 添加is_public字段映射
                 updatedAt: cm.updated_at,
                 lastModified: cm.updated_at
               });
@@ -844,7 +844,7 @@ export function SettingsProvider({ children }) {
               tags: JSON.parse(memo.tags || '[]'),
               backlinks: JSON.parse(memo.backlinks || '[]'),
               audioClips: JSON.parse(memo.audio_clips || '[]'),
-              is_public: memo.is_public ? true : false,
+              is_public: typeof memo.is_public === 'boolean' ? memo.is_public : (memo.is_public === 1),
               timestamp: memo.created_at,
               lastModified: memo.updated_at,
               createdAt: memo.created_at,
@@ -894,7 +894,7 @@ export function SettingsProvider({ children }) {
                 tags: JSON.parse(memo.tags || '[]'),
                 backlinks: JSON.parse(memo.backlinks || '[]'),
                 audioClips: JSON.parse(memo.audio_clips || '[]'),
-                is_public: memo.is_public ? true : false,
+                is_public: typeof memo.is_public === 'boolean' ? memo.is_public : (memo.is_public === 1),
                 timestamp: memo.created_at,
                 lastModified: memo.updated_at,
                 createdAt: memo.created_at,

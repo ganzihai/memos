@@ -273,7 +273,12 @@ const Index = () => {
 
     if (savedPinned) {
       try {
-        setPinnedMemos(JSON.parse(savedPinned));
+        const parsedPinned = JSON.parse(savedPinned);
+        const normalizedPinned = parsedPinned.map(memo => ({
+          ...memo,
+          is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false
+        }));
+        setPinnedMemos(normalizedPinned);
       } catch (e) {
         console.error('Failed to parse pinned memos from localStorage', e);
       }
@@ -360,8 +365,12 @@ const Index = () => {
         }
         if (savedPinned) {
           const parsedPinned = JSON.parse(savedPinned);
-          if (JSON.stringify(parsedPinned) !== JSON.stringify(pinnedMemos)) {
-            setPinnedMemos(parsedPinned);
+          const normalizedPinned = parsedPinned.map(memo => ({
+            ...memo,
+            is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false
+          }));
+          if (JSON.stringify(normalizedPinned) !== JSON.stringify(pinnedMemos)) {
+            setPinnedMemos(normalizedPinned);
           }
         }
       } catch { }
@@ -662,7 +671,6 @@ const Index = () => {
           setMemos(nextMemos);
           localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
           localStorage.setItem('memos', JSON.stringify(nextMemos));
-          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'memo.pin', id: memoId } })); } catch {}
           if (isAuthenticated && _scheduleCloudSync) {
             try { _scheduleCloudSync('memo-pin'); } catch {}
           }
@@ -679,7 +687,6 @@ const Index = () => {
           setPinnedMemos(nextPinned);
           localStorage.setItem('memos', JSON.stringify(nextMemos));
           localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-          try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'memo.unpin', id: memoId } })); } catch {}
           if (isAuthenticated && _scheduleCloudSync) {
             try { _scheduleCloudSync('memo-unpin'); } catch {}
           }
