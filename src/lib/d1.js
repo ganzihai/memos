@@ -76,8 +76,18 @@ export class D1DatabaseService {
   s3Config: JSON.parse(localStorage.getItem('s3Config') || '{"enabled":false,"endpoint":"","accessKeyId":"","secretAccessKey":"","bucket":"","region":"auto","publicUrl":"","provider":"r2"}')
       };
 
+      // 合并普通 memos 和 pinned memos 以便全部保存到 memos 表中
+      const allMemos = [...(localData.memos || [])];
+      if (localData.pinnedMemos && Array.isArray(localData.pinnedMemos)) {
+        for (const pm of localData.pinnedMemos) {
+          if (!allMemos.some(m => m.id === pm.id)) {
+            allMemos.push(pm);
+          }
+        }
+      }
+
       // 同步memos
-      for (const memo of localData.memos) {
+      for (const memo of allMemos) {
         await this.upsertMemo(memo);
       }
 
@@ -185,8 +195,8 @@ export class D1DatabaseService {
     
     // 确保时间戳不为空，使用当前时间作为备用
     const now = new Date().toISOString();
-    const createdAt = memo.timestamp || now;
-    const updatedAt = memo.lastModified || memo.timestamp || now;
+    const createdAt = memo.timestamp || memo.createdAt || now;
+    const updatedAt = memo.updatedAt || memo.lastModified || memo.timestamp || memo.createdAt || now;
 
     // 检查memo是否已存在
     const existingMemo = await db

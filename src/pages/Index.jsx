@@ -711,6 +711,8 @@ const Index = () => {
         }));
         setMemos(nextMemos);
         setPinnedMemos(nextPinned);
+        localStorage.setItem('memos', JSON.stringify(nextMemos));
+        localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
         // 记录删除墓碑用于云端删除
         addDeletedMemoTombstone(memoId);
         break;
@@ -747,6 +749,16 @@ const Index = () => {
 
     setMemos(updatedMemos);
     setPinnedMemos(updatedPinned);
+    
+    // 保存到 localStorage
+    localStorage.setItem('memos', JSON.stringify(updatedMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
+    
+    // 触发云同步
+    if (isAuthenticated && _scheduleCloudSync) {
+      try { _scheduleCloudSync('memo-edit'); } catch {}
+    }
+
     setEditingId(null);
     setEditContent('');
   };
@@ -771,16 +783,22 @@ const Index = () => {
       if (curr.includes(targetId)) return curr;
       return [...curr, targetId];
     };
-    setMemos(prev => prev.map(m => {
+    const nextMemos = memos.map(m => {
       if (m.id === fromId) return { ...m, backlinks: updateOne(m, toId), updatedAt: new Date().toISOString() };
       if (m.id === toId) return { ...m, backlinks: updateOne(m, fromId), updatedAt: new Date().toISOString() };
       return m;
-    }));
-    setPinnedMemos(prev => prev.map(m => {
+    });
+    const nextPinned = pinnedMemos.map(m => {
       if (m.id === fromId) return { ...m, backlinks: updateOne(m, toId), updatedAt: new Date().toISOString() };
       if (m.id === toId) return { ...m, backlinks: updateOne(m, fromId), updatedAt: new Date().toISOString() };
       return m;
-    }));
+    });
+    
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
   // 移除双链：从双方的 backlinks 中互相删除；顶部新建时（fromId 为空）从待建列表删除
@@ -796,8 +814,14 @@ const Index = () => {
       if (m.id === toId) return { ...m, backlinks: (Array.isArray(m.backlinks) ? m.backlinks.filter(id => id !== fromId) : []), updatedAt: new Date().toISOString() };
       return m;
     });
-    setMemos(prev => prune(prev));
-    setPinnedMemos(prev => prune(prev));
+    
+    const nextMemos = prune(memos);
+    const nextPinned = prune(pinnedMemos);
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
   // 移除录音：fromId 为空表示新建 memo（移除待提交列表），否则从对应 memo 中移除下标 idx
@@ -813,8 +837,14 @@ const Index = () => {
       const nextClips = clips.filter((_, i) => i !== idx);
       return { ...m, audioClips: nextClips, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
     });
-    setMemos((prev) => removeFrom(prev));
-    setPinnedMemos((prev) => removeFrom(prev));
+    
+    const nextMemos = removeFrom(memos);
+    const nextPinned = removeFrom(pinnedMemos);
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
   // 添加录音到某条 memo；fromId 为空表示当前是“新建 memo”编辑器，加入待提交列表
@@ -829,8 +859,14 @@ const Index = () => {
       const prev = Array.isArray(m.audioClips) ? m.audioClips : [];
       return { ...m, audioClips: [...prev, clip], updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
     });
-    setMemos(prev => addTo(prev));
-    setPinnedMemos(prev => addTo(prev));
+    
+    const nextMemos = addTo(memos);
+    const nextPinned = addTo(pinnedMemos);
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
   // 预览某条 memo
@@ -1244,31 +1280,44 @@ const Index = () => {
         isPinned: true,
         pinnedAt: new Date().toISOString()
       };
-      setPinnedMemos([pinnedMemo, ...pinnedMemos]);
+      const nextPinned = [pinnedMemo, ...pinnedMemos];
+      setPinnedMemos(nextPinned);
+      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
     } else {
-      setMemos([memo, ...memos]);
+      const nextMemos = [memo, ...memos];
+      setMemos(nextMemos);
+      localStorage.setItem('memos', JSON.stringify(nextMemos));
     }
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-add'); } catch {} }
   };
 
   const handleCanvasUpdateMemo = (id, updates) => {
     // 更新memos
     const updatedMemos = memos.map(memo =>
-      memo.id === id ? { ...memo, ...updates } : memo
+      memo.id === id ? { ...memo, ...updates, updatedAt: new Date().toISOString() } : memo
     );
 
     // 更新pinnedMemos
     const updatedPinned = pinnedMemos.map(memo =>
-      memo.id === id ? { ...memo, ...updates } : memo
+      memo.id === id ? { ...memo, ...updates, updatedAt: new Date().toISOString() } : memo
     );
 
     setMemos(updatedMemos);
     setPinnedMemos(updatedPinned);
+    localStorage.setItem('memos', JSON.stringify(updatedMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-update'); } catch {} }
   };
 
   const handleCanvasDeleteMemo = (id) => {
-    setMemos(memos.filter(memo => memo.id !== id));
-    setPinnedMemos(pinnedMemos.filter(memo => memo.id !== id));
+    const nextMemos = memos.filter(memo => memo.id !== id);
+    const nextPinned = pinnedMemos.filter(memo => memo.id !== id);
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
     addDeletedMemoTombstone(id);
+    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-delete'); } catch {} }
   };
 
   const handleCanvasTogglePin = (id) => {
@@ -1280,16 +1329,27 @@ const Index = () => {
       const pinnedMemo = {
         ...memoInMemos,
         isPinned: true,
-        pinnedAt: new Date().toISOString()
+        pinnedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
-      setPinnedMemos([pinnedMemo, ...pinnedMemos]);
-      setMemos(memos.filter(memo => memo.id !== id));
+      const nextPinned = [pinnedMemo, ...pinnedMemos];
+      const nextMemos = memos.filter(memo => memo.id !== id);
+      setPinnedMemos(nextPinned);
+      setMemos(nextMemos);
+      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+      localStorage.setItem('memos', JSON.stringify(nextMemos));
+      if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-pin'); } catch {} }
     } else if (memoInPinned) {
       // 从pinnedMemos移动到普通memos
-      const unpinnedMemo = { ...memoInPinned, isPinned: false };
+      const unpinnedMemo = { ...memoInPinned, isPinned: false, updatedAt: new Date().toISOString() };
       delete unpinnedMemo.pinnedAt;
-      setMemos([unpinnedMemo, ...memos]);
-      setPinnedMemos(pinnedMemos.filter(memo => memo.id !== id));
+      const nextMemos = [unpinnedMemo, ...memos];
+      const nextPinned = pinnedMemos.filter(memo => memo.id !== id);
+      setMemos(nextMemos);
+      setPinnedMemos(nextPinned);
+      localStorage.setItem('memos', JSON.stringify(nextMemos));
+      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+      if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-unpin'); } catch {} }
     }
   };
 

@@ -39,18 +39,30 @@ export class D1ApiClient {
     try {
       const baseUrl = await this.getBaseUrl();
 
+      // 合并普通 memos 和 pinned memos 以便全部保存到 memos 表中
+      const allMemos = [...(data.memos || [])];
+      
+      // 检查并合并 pinnedMemos
+      if (data.pinnedMemos && Array.isArray(data.pinnedMemos)) {
+        for (const pm of data.pinnedMemos) {
+          if (!allMemos.some(m => m.id === pm.id)) {
+            allMemos.push(pm);
+          }
+        }
+      }
+
       // 批量同步memos
-      if (data.memos && data.memos.length > 0) {
+      if (allMemos.length > 0) {
         const now = new Date().toISOString();
-        const memosPayload = data.memos.map(memo => ({
+        const memosPayload = allMemos.map(memo => ({
           memo_id: memo.id,
           content: memo.content,
           tags: memo.tags || [],
           backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
           audio_clips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
           is_public: memo.is_public ? 1 : 0,
-          created_at: memo.timestamp || now,
-          updated_at: memo.lastModified || memo.timestamp || now
+          created_at: memo.timestamp || memo.createdAt || now,
+          updated_at: memo.updatedAt || memo.lastModified || memo.timestamp || memo.createdAt || now
         }));
 
         const response = await fetch(`${baseUrl}/api/memos`, {
@@ -183,8 +195,8 @@ export class D1ApiClient {
 
       // 确保时间戳不为空，使用当前时间作为备用
       const now = new Date().toISOString();
-      const createdAt = memo.timestamp || now;
-      const updatedAt = memo.lastModified || memo.timestamp || now;
+      const createdAt = memo.timestamp || memo.createdAt || now;
+      const updatedAt = memo.updatedAt || memo.lastModified || memo.timestamp || memo.createdAt || now;
 
       const response = await fetch(`${baseUrl}/api/memos`, {
         method: 'POST',
