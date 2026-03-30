@@ -205,7 +205,7 @@ const MemoList = ({
 
       <div className="flex-1 mobile-memos-container lg:mobile-memos-container-disabled min-h-[250px]">
     {memos.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
+          <div className="flex-1 flex items-center justify-center text-gray-500 py-10">
             <div className="text-center">
               <p>还没有记录任何想法</p>
               <p className="text-sm mt-2">在顶部输入框写下你的第一个想法吧</p>
