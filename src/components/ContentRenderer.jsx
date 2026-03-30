@@ -179,7 +179,88 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
       l.href = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
       document.head.appendChild(l);
     }
+    
+    if (!window.mermaid && !window.__mermaidLoading) {
+      window.__mermaidLoading = true;
+      const ms = document.createElement('script');
+      ms.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+      ms.onload = () => { 
+        window.__mermaidLoading = false;
+        if (window.mermaid) {
+          window.mermaid.initialize({ 
+            startOnLoad: false, 
+            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+            securityLevel: 'loose'
+          });
+          // Dispatch event to re-render mermaid diagrams
+          window.dispatchEvent(new Event('mermaid-loaded'));
+        }
+      };
+      document.head.appendChild(ms);
+    }
   }, []);
+
+  // Update mermaid theme when dark mode changes
+  useEffect(() => {
+    if (window.mermaid) {
+      window.mermaid.initialize({ 
+        theme: darkMode ? 'dark' : 'default'
+      });
+      window.dispatchEvent(new Event('mermaid-theme-changed'));
+    }
+  }, [darkMode]);
+
+  const MermaidBlock = ({ text }) => {
+    const [svg, setSvg] = useState('');
+    const [error, setError] = useState(false);
+    // 使用固定的随机ID，避免每次渲染都生成新的
+    const idRef = React.useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`);
+
+    const renderMermaid = async () => {
+      if (window.mermaid) {
+        try {
+          // 清除可能存在的旧节点，避免冲突
+          const oldNode = document.getElementById(idRef.current);
+          if (oldNode) oldNode.remove();
+          
+          const { svg: svgCode } = await window.mermaid.render(idRef.current, text);
+          setSvg(svgCode);
+          setError(false);
+        } catch (e) {
+          console.error('Mermaid render error:', e);
+          setError(true);
+        }
+      }
+    };
+
+    useEffect(() => {
+      renderMermaid();
+      
+      const handleMermaidLoaded = () => renderMermaid();
+      window.addEventListener('mermaid-loaded', handleMermaidLoaded);
+      window.addEventListener('mermaid-theme-changed', handleMermaidLoaded);
+      
+      return () => {
+        window.removeEventListener('mermaid-loaded', handleMermaidLoaded);
+        window.removeEventListener('mermaid-theme-changed', handleMermaidLoaded);
+      };
+    }, [text]);
+
+    if (error) {
+      return <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded text-sm border border-red-200 dark:border-red-800">Failed to render Mermaid diagram. Please check syntax.</div>;
+    }
+
+    if (!svg) {
+      return <div className="p-4 text-center text-gray-500 text-sm animate-pulse">Loading diagram...</div>;
+    }
+
+    return (
+      <div 
+        className="my-4 flex justify-center overflow-x-auto bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+        dangerouslySetInnerHTML={{ __html: svg }} 
+      />
+    );
+  };
 
   const CodeBlock = ({ text, lang }) => {
     const [copied, setCopied] = useState(false);
@@ -355,13 +436,33 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                           }
                           return <img {...props} />;
                         },
-                        code: ({inline, className, children, ...props}) => {
+                        pre: ({node, children, ...props}) => {
+                          // Extract code element from pre children
+                          let codeElement = children;
+                          if (Array.isArray(children)) {
+                            codeElement = children.find(c => c && c.type === 'code');
+                          }
+                          if (!codeElement || !codeElement.props) {
+                            return <pre {...props}>{children}</pre>;
+                          }
+                          
+                          const codeProps = codeElement.props;
+                          const raw = String(codeProps.children || '');
+                          const text = raw.replace(/\\n/g, '\n').replace(/\n$/, '');
+                          const className = codeProps.className || '';
+                          const m = /language-([\w-]+)/.exec(className);
+                          const lang = m ? m[1] : null;
+                          
+                          if (lang === 'mermaid') {
+                            return <MermaidBlock text={text} />;
+                          }
+                          
+                          return <CodeBlock text={text} lang={lang} />;
+                        },
+                        code: ({node, className, children, ...props}) => {
                           const raw = String(children || '');
                           const text = raw.replace(/\\n/g, '\n');
-                          if (inline) return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
-                          const m = /language-([\w-]+)/.exec(className || '');
-                          const lang = m ? m[1] : null;
-                          return <CodeBlock text={text} lang={lang} />;
+                          return <code className="px-1.5 py-0.5 mx-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-sm border border-gray-200 dark:border-gray-700" {...props}>{text}</code>;
                         },
                       }}
                       remarkPlugins={[remarkEmojiShortcode]}
