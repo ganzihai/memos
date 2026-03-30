@@ -12,8 +12,6 @@ export function ThemeProvider({ children }) {
   // 预加载字体资源
   useEffect(() => {
     const fontUrls = {
-      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
-      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
       kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
     };
 
