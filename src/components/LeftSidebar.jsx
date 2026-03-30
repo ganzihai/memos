@@ -110,36 +110,6 @@ const LeftSidebar = ({
         <div className="flex-1 overflow-hidden">
           <GitHubStyleHeatmap data={heatmapData} onDateClick={onDateClick} isSidebarHovered={!isLeftSidebarPinned && isLeftSidebarHovered} />
           <UsageStats memos={memos} pinnedMemos={pinnedMemos} />
-
-          {/* 每日回顾入口 */}
-          <div className="px-2 pt-4">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={onOpenDailyReview}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onOpenDailyReview?.();
-                }
-              }}
-              className="relative w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-colors duration-200 bg-gray-200 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none"
-              aria-label="打开每日回顾"
-            >
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4" style={{ color: themeColor }} />
-                <span className="text-sm font-medium" style={{ color: themeColor }}>每日回顾</span>
-              </div>
-              {/* 重置今日按钮（小×）：无圆形包裹，垂直居中，靠右 */}
-              <button
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); resetTodayReviewStatus(); }}
-                className="ml-auto px-1 text-sm leading-none text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                aria-label="重置今日卡片为FAIL"
-              >
-                ×
-              </button>
-            </div>
-          </div>
   {/* 关闭上方的 flex-1 overflow-hidden 容器 */}
   </div>
 
