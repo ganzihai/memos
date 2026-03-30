@@ -621,7 +621,7 @@ const Index = () => {
         // 切换公开状态
         const updateMemoPublicStatus = (list) => list.map(memo =>
           memo.id === memoId
-            ? { ...memo, is_public: !memo.is_public, updatedAt: new Date().toISOString() }
+            ? { ...memo, is_public: !memo.is_public, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() }
             : memo
         );
         const updatedMemos = updateMemoPublicStatus(memos);
@@ -722,6 +722,9 @@ const Index = () => {
         localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
         // 记录删除墓碑用于云端删除
         addDeletedMemoTombstone(memoId);
+        if (isAuthenticated && _scheduleCloudSync) {
+          try { _scheduleCloudSync('memo-delete'); } catch {}
+        }
         break;
       default:
         break;
@@ -741,7 +744,8 @@ const Index = () => {
         ...memo,
         content: editContent,
         tags: extractedTags,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
       } : memo
     );
 
@@ -750,7 +754,8 @@ const Index = () => {
         ...memo,
         content: editContent,
         tags: extractedTags,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
       } : memo
     );
 

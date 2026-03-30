@@ -432,9 +432,18 @@ export function SettingsProvider({ children }) {
       await (async () => {
         // 优先 API 客户端，失败降级
         try {
+          const localMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+          const localPinnedMemos = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
+          
+          // 在上传前确保所有记录都有正确的布尔值 is_public 字段
+          const sanitizePublicFlag = (list) => list.map(m => ({
+            ...m,
+            is_public: typeof m.is_public === 'boolean' ? m.is_public : (m.is_public === 1)
+          }));
+
           const localData = {
-            memos: JSON.parse(localStorage.getItem('memos') || '[]'),
-            pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
+            memos: sanitizePublicFlag(localMemos),
+            pinnedMemos: sanitizePublicFlag(localPinnedMemos),
             themeColor: localStorage.getItem('themeColor') || '#969696',
             darkMode: localStorage.getItem('darkMode') || 'false',
             hitokotoConfig: JSON.parse(localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}'),
@@ -975,9 +984,17 @@ export function SettingsProvider({ children }) {
   const syncToD1 = async () => {
     try {
   // 获取本地数据
+      const localMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+      const localPinnedMemos = JSON.parse(localStorage.getItem('pinnedMemos') || '[]');
+      
+      const sanitizePublicFlag = (list) => list.map(m => ({
+        ...m,
+        is_public: typeof m.is_public === 'boolean' ? m.is_public : (m.is_public === 1)
+      }));
+
       const localData = {
-        memos: JSON.parse(localStorage.getItem('memos') || '[]'),
-        pinnedMemos: JSON.parse(localStorage.getItem('pinnedMemos') || '[]'),
+        memos: sanitizePublicFlag(localMemos),
+        pinnedMemos: sanitizePublicFlag(localPinnedMemos),
         themeColor: localStorage.getItem('themeColor') || '#969696',
         darkMode: localStorage.getItem('darkMode') || 'false',
         hitokotoConfig: JSON.parse(localStorage.getItem('hitokotoConfig') || '{"enabled":true,"types":["a","b","c","d","i","j","k"]}'),
