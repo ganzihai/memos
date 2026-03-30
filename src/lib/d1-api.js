@@ -93,7 +93,8 @@ export class D1ApiClient {
         avatarConfig: data.avatarConfig,
         canvasConfig: data.canvasConfig,
         musicConfig: data.musicConfig,
-        s3Config: data.s3Config
+        s3Config: data.s3Config,
+        updated_at: new Date().toISOString()
       });
 
       return { success: true, message: '数据同步到D1成功' };
@@ -249,7 +250,8 @@ export class D1ApiClient {
           avatar_config: settings.avatarConfig,
           canvas_config: settings.canvasConfig,
           music_config: settings.musicConfig,
-          s3_config: settings.s3Config
+          s3_config: settings.s3Config,
+          updated_at: settings.updated_at
         }),
       });
 

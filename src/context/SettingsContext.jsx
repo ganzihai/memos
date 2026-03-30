@@ -378,45 +378,58 @@ export function SettingsProvider({ children }) {
         // 🔧 修复多端置顶状态同步问题：
         // 云端的置顶状态是通过 settings 里的 pinned_memos 字段保存的
         // 如果远端的 pinned_memos 列表与本地不同，需要同步远端的置顶状态
+        // 关键修复：需要使用最后更新时间来判断是谁覆盖谁，而不是盲目地用云端覆盖本地
         if (isAuthenticated) {
           try {
             const res = await D1ApiClient.restoreUserData();
-            if (res?.success && res.data?.settings?.pinned_memos) {
-              const cloudPinnedIds = JSON.parse(res.data.settings.pinned_memos).map(p => String(p.id));
-              const localPinnedIds = Array.from(pinnedIds);
+            if (res?.success && res.data?.settings) {
+              const cloudSettings = res.data.settings;
+              const cloudPinnedMemosRaw = cloudSettings.pinned_memos || '[]';
+              const cloudPinnedMemos = JSON.parse(cloudPinnedMemosRaw);
+              const cloudPinnedIds = cloudPinnedMemos.map(p => String(p.id));
               
-              // 检查云端是否有新增的置顶
-              const hasNewPins = cloudPinnedIds.some(id => !pinnedIds.has(id));
-              // 检查云端是否有取消的置顶
-              const hasRemovedPins = localPinnedIds.some(id => !cloudPinnedIds.includes(id));
+              // 比较远端 settings.updated_at 和本地 settings 的更新时间
+              // 由于没有本地 settings 的时间戳，我们比较本地 lastCloudSyncAt 
+              const cloudSettingsTime = new Date(cloudSettings.updated_at || 0).getTime();
+              const localSyncTime = Number(localStorage.getItem('lastCloudSyncAt') || 0);
               
-              if (hasNewPins || hasRemovedPins) {
-                // 如果置顶状态有差异，重新解析远端 pinned_memos 并应用
-                const cloudPinnedMemos = JSON.parse(res.data.settings.pinned_memos);
-                localStorage.setItem('pinnedMemos', JSON.stringify(cloudPinnedMemos));
+              // 只有当云端的设置比上次同步时间更新时，才认为云端有外部修改，需要拉取
+              // 为了避免置顶状态因为微小的时间差被覆盖，给本地加上一个安全窗口（5秒）
+              if (cloudSettingsTime > localSyncTime + 5000) {
+                const localPinnedIds = Array.from(pinnedIds);
                 
-                // 需要将取消置顶的 memo 放回普通 memos 列表中
-                if (hasRemovedPins) {
-                  const currentMemos = JSON.parse(localStorage.getItem('memos') || '[]');
-                  const currentMemosMap = new Map(currentMemos.map(m => [String(m.id), m]));
-                  let memosChanged = false;
+                // 检查云端是否有新增的置顶
+                const hasNewPins = cloudPinnedIds.some(id => !pinnedIds.has(id));
+                // 检查云端是否有取消的置顶
+                const hasRemovedPins = localPinnedIds.some(id => !cloudPinnedIds.includes(id));
+                
+                if (hasNewPins || hasRemovedPins) {
+                  // 应用云端的置顶状态
+                  localStorage.setItem('pinnedMemos', JSON.stringify(cloudPinnedMemos));
                   
-                  localPinnedIds.forEach(id => {
-                    if (!cloudPinnedIds.includes(id) && pinnedMap.has(id)) {
-                      const unpinnedMemo = { ...pinnedMap.get(id), isPinned: false };
-                      delete unpinnedMemo.pinnedAt;
-                      currentMemosMap.set(id, unpinnedMemo);
-                      memosChanged = true;
+                  // 需要将取消置顶的 memo 放回普通 memos 列表中
+                  if (hasRemovedPins) {
+                    const currentMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+                    const currentMemosMap = new Map(currentMemos.map(m => [String(m.id), m]));
+                    let memosChanged = false;
+                    
+                    localPinnedIds.forEach(id => {
+                      if (!cloudPinnedIds.includes(id) && pinnedMap.has(id)) {
+                        const unpinnedMemo = { ...pinnedMap.get(id), isPinned: false };
+                        delete unpinnedMemo.pinnedAt;
+                        currentMemosMap.set(id, unpinnedMemo);
+                        memosChanged = true;
+                      }
+                    });
+                    
+                    if (memosChanged) {
+                      const nextMemos = Array.from(currentMemosMap.values())
+                        .sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0));
+                      localStorage.setItem('memos', JSON.stringify(nextMemos));
                     }
-                  });
-                  
-                  if (memosChanged) {
-                    const nextMemos = Array.from(currentMemosMap.values())
-                      .sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0));
-                    localStorage.setItem('memos', JSON.stringify(nextMemos));
                   }
+                  try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'sync.downmerge.pins' } })); } catch {}
                 }
-                try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'sync.downmerge' } })); } catch {}
               }
             }
           } catch (e) {

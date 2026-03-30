@@ -29,7 +29,7 @@ export async function onRequest(context) {
     } else if (method === 'POST') {
       // 创建或更新用户设置
     const body = await request.json();
-  const { pinned_memos, theme_color, dark_mode, hitokoto_config, font_config, background_config, avatar_config, canvas_config, music_config, s3_config } = body;
+  const { pinned_memos, theme_color, dark_mode, hitokoto_config, font_config, background_config, avatar_config, canvas_config, music_config, s3_config, updated_at } = body;
       
       // 检查用户设置是否已存在
       const existingSettings = await env.DB
@@ -51,7 +51,7 @@ export async function onRequest(context) {
             canvas_config ? JSON.stringify(canvas_config) : null,
             JSON.stringify(music_config || { enabled: true, customSongs: [] }),
             JSON.stringify(s3_config || { enabled: false, endpoint: '', accessKeyId: '', secretAccessKey: '', bucket: '', region: 'auto', publicUrl: '', provider: 'r2' }),
-            new Date().toISOString()
+            updated_at || new Date().toISOString()
           )
           .run();
       } else {
@@ -70,7 +70,7 @@ export async function onRequest(context) {
             JSON.stringify(music_config || { enabled: true, customSongs: [] }),
             JSON.stringify(s3_config || { enabled: false, endpoint: '', accessKeyId: '', secretAccessKey: '', bucket: '', region: 'auto', publicUrl: '', provider: 'r2' }),
             new Date().toISOString(),
-            new Date().toISOString()
+            updated_at || new Date().toISOString()
           )
           .run();
       }
