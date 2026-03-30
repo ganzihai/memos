@@ -46,12 +46,12 @@ const Header = ({
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Logo */}
+        {/* Logo
         <img
           src="https://img.ganzi.fun/file/AgACAgUAAyEGAATnFyQYAAMYacjUSC3ZPRK5_FAgnJnO7Ir35eIAAj8Vaxv5HUBWR7L7seHaJWABAAMCAAN4AAM6BA.png"
           alt="应用Logo"
           className="h-10 w-10 rounded-full object-cover"
-        />
+        /> */}
         <span
           className="ml-2 text-lg font-bold transition-colors duration-300"
           style={{ color: themeColor }}
