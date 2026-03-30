@@ -54,7 +54,7 @@ const Header = ({
         /> */}
         <span
           className="ml-2 text-lg font-bold transition-colors duration-300"
-          style={{ color: themeColor }}
+          style={{ color: '#000000' }}
         >
           备忘录
         </span>
