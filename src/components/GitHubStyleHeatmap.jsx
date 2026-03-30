@@ -114,24 +114,24 @@ const GitHubStyleHeatmap = ({ data = [], onDateClick, isSidebarHovered = false }
     return labels;
   };
 
-  // 根据等级获取颜色 - 添加黑暗模式支持
+  // 根据等级获取颜色 - 修改为灰色渐变
   const getLevelColor = (level) => {
     if (darkMode) {
       const darkColors = {
-        0: '#2d333b', // 无活动
-        1: '#0e4429', // 1-3条
-        2: '#006d32', // 4-6条
-        3: '#26a641', // 7-9条
-        4: '#39d353'  // 10+条
+        0: '#2d333b', // 无活动 (深背景色)
+        1: '#4b5563', // 1-3条 (gray-600)
+        2: '#6b7280', // 4-6条 (gray-500)
+        3: '#9ca3af', // 7-9条 (gray-400)
+        4: '#d1d5db'  // 10+条 (gray-300)
       };
       return darkColors[level];
     } else {
       const lightColors = {
         0: '#ebedf0', // 无活动
-        1: '#9be9a8', // 1-3条
-        2: '#40c463', // 4-6条
-        3: '#30a14e', // 7-9条
-        4: '#216e39'  // 10+条
+        1: '#d1d5db', // 1-3条 (gray-300)
+        2: '#9ca3af', // 4-6条 (gray-400)
+        3: '#6b7280', // 7-9条 (gray-500)
+        4: '#4b5563'  // 10+条 (gray-600)
       };
       return lightColors[level];
     }
