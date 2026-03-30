@@ -249,7 +249,7 @@ const MemoInput = ({
   }
 
   return (
-    <div className="flex-shrink-0 py-3 sm:py-4 lg:py-6 pb-0">
+    <div className="flex-shrink-0 py-3 sm:py-4 lg:py-6 pb-6 sm:pb-8">
       <div className="relative">
         <MemoEditor
           value={newMemo}

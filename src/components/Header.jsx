@@ -84,33 +84,17 @@ const Header = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const q = (searchQuery || '').trim();
-                if (q) {
-                  // 仅触发音乐搜索卡片展示，不改变现有过滤逻辑
-                  onOpenMusicSearch && onOpenMusicSearch(q);
-                }
                 // 移动端：回车后收起键盘
                 e.target.blur();
               }
             }}
-            className="pr-10 md:pr-20"
+            className="pr-4 md:pr-20"
           />
           
-          {/* 搜索按钮 - 移动端显示，点击触发音乐搜索 */}
-          {searchQuery && (
-            <button
-              onClick={() => {
-                const q = (searchQuery || '').trim();
-                if (q) {
-                  onOpenMusicSearch && onOpenMusicSearch(q);
-                }
-              }}
-              className="md:hidden absolute inset-y-0 right-0 flex items-center pr-3 text-blue-500 hover:text-blue-600"
-              aria-label="搜索音乐"
-            >
-              <Search className="h-4 w-4" />
-            </button>
-          )}
+          {/* 搜索按钮 - 移动端不再劫持搜索为音乐搜索 */}
+          <div className="md:hidden absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 pointer-events-none">
+            <Search className="h-4 w-4" />
+          </div>
           
           {/* Ctrl+K快捷键提示 - 仅在桌面端显示 */}
           <div className="hidden md:flex absolute inset-y-0 right-0 items-center pr-3 pointer-events-none">
