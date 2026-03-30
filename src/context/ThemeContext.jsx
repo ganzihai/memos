@@ -12,9 +12,9 @@ export function ThemeProvider({ children }) {
   // 预加载字体资源
   useEffect(() => {
     const fontUrls = {
-      jinghua: 'https://pic.lover.nyc.mn/2025-07/songti_1753944378889.ttf',
-      lxgw: 'https://pic.lover.nyc.mn/2025-07/LXGWWenKai-Regular_1753944392267.ttf',
-      kongshan: 'https://pic.lover.nyc.mn/2025-07/kongshan_1753944354149.ttf'
+      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
+      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
+      kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
     };
 
     // 创建字体预加载函数
@@ -176,9 +176,9 @@ export function ThemeProvider({ children }) {
   // 应用字体设置
   useEffect(() => {
     const fontUrls = {
-      jinghua: 'https://pic.lover.nyc.mn/2025-07/songti_1753944378889.ttf',
-      lxgw: 'https://pic.lover.nyc.mn/2025-07/LXGWWenKai-Regular_1753944392267.ttf',
-      kongshan: 'https://pic.lover.nyc.mn/2025-07/kongshan_1753944354149.ttf'
+      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
+      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
+      kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
     };
 
     // 移除之前的字体样式
