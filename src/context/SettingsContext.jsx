@@ -374,6 +374,56 @@ export function SettingsProvider({ children }) {
           localStorage.setItem('pinnedMemos', JSON.stringify(nextPinnedArr));
           try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'sync.downmerge' } })); } catch {}
         }
+        
+        // 🔧 修复多端置顶状态同步问题：
+        // 云端的置顶状态是通过 settings 里的 pinned_memos 字段保存的
+        // 如果远端的 pinned_memos 列表与本地不同，需要同步远端的置顶状态
+        if (isAuthenticated) {
+          try {
+            const res = await D1ApiClient.restoreUserData();
+            if (res?.success && res.data?.settings?.pinned_memos) {
+              const cloudPinnedIds = JSON.parse(res.data.settings.pinned_memos).map(p => String(p.id));
+              const localPinnedIds = Array.from(pinnedIds);
+              
+              // 检查云端是否有新增的置顶
+              const hasNewPins = cloudPinnedIds.some(id => !pinnedIds.has(id));
+              // 检查云端是否有取消的置顶
+              const hasRemovedPins = localPinnedIds.some(id => !cloudPinnedIds.includes(id));
+              
+              if (hasNewPins || hasRemovedPins) {
+                // 如果置顶状态有差异，重新解析远端 pinned_memos 并应用
+                const cloudPinnedMemos = JSON.parse(res.data.settings.pinned_memos);
+                localStorage.setItem('pinnedMemos', JSON.stringify(cloudPinnedMemos));
+                
+                // 需要将取消置顶的 memo 放回普通 memos 列表中
+                if (hasRemovedPins) {
+                  const currentMemos = JSON.parse(localStorage.getItem('memos') || '[]');
+                  const currentMemosMap = new Map(currentMemos.map(m => [String(m.id), m]));
+                  let memosChanged = false;
+                  
+                  localPinnedIds.forEach(id => {
+                    if (!cloudPinnedIds.includes(id) && pinnedMap.has(id)) {
+                      const unpinnedMemo = { ...pinnedMap.get(id), isPinned: false };
+                      delete unpinnedMemo.pinnedAt;
+                      currentMemosMap.set(id, unpinnedMemo);
+                      memosChanged = true;
+                    }
+                  });
+                  
+                  if (memosChanged) {
+                    const nextMemos = Array.from(currentMemosMap.values())
+                      .sort((a, b) => new Date(b.createdAt || b.timestamp || 0) - new Date(a.createdAt || a.timestamp || 0));
+                    localStorage.setItem('memos', JSON.stringify(nextMemos));
+                  }
+                }
+                try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'sync.downmerge' } })); } catch {}
+              }
+            }
+          } catch (e) {
+            console.warn('同步置顶状态失败', e);
+          }
+        }
+        
       } catch {
   // 忽略下行合并失败，继续尝试上行
       }
