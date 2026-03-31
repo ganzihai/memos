@@ -815,7 +815,7 @@ export function SettingsProvider({ children }) {
               const res = await D1ApiClient.restoreUserData();
               if (res?.success && res.data?.settings) {
                 const settings = res.data.settings;
-                if (settings.theme_color) { localStorage.setItem('themeColor', settings.theme_color); setThemeColor(settings.theme_color); }
+                if (settings.theme_color) { localStorage.setItem('themeColor', settings.theme_color); window.dispatchEvent(new CustomEvent('app:themeColorChanged', { detail: settings.theme_color })); }
                 if (settings.dark_mode !== null) localStorage.setItem('darkMode', settings.dark_mode.toString());
                 if (settings.hitokoto_config) { localStorage.setItem('hitokotoConfig', settings.hitokoto_config); try { setHitokotoConfig(JSON.parse(settings.hitokoto_config)); } catch {} }
                 if (settings.font_config) { localStorage.setItem('fontConfig', settings.font_config); try { setFontConfig(JSON.parse(settings.font_config)); } catch {} }
@@ -877,7 +877,7 @@ export function SettingsProvider({ children }) {
 
           if (res.data?.settings) {
             if (res.data.settings.pinned_memos) localStorage.setItem('pinnedMemos', res.data.settings.pinned_memos);
-            if (res.data.settings.theme_color) { localStorage.setItem('themeColor', res.data.settings.theme_color); setThemeColor(res.data.settings.theme_color); }
+            if (res.data.settings.theme_color) { localStorage.setItem('themeColor', res.data.settings.theme_color); window.dispatchEvent(new CustomEvent('app:themeColorChanged', { detail: res.data.settings.theme_color })); }
             if (res.data.settings.dark_mode !== null) localStorage.setItem('darkMode', res.data.settings.dark_mode.toString());
             if (res.data.settings.hitokoto_config) { localStorage.setItem('hitokotoConfig', res.data.settings.hitokoto_config); try { setHitokotoConfig(JSON.parse(res.data.settings.hitokoto_config)); } catch {} }
             if (res.data.settings.font_config) { localStorage.setItem('fontConfig', res.data.settings.font_config); try { setFontConfig(JSON.parse(res.data.settings.font_config)); } catch {} }

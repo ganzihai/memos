@@ -217,13 +217,25 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     const idRef = React.useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`);
 
     const renderMermaid = async () => {
-      if (window.mermaid) {
+      if (window.mermaid && text) {
         try {
           // 清除可能存在的旧节点，避免冲突
           const oldNode = document.getElementById(idRef.current);
           if (oldNode) oldNode.remove();
           
-          const { svg: svgCode } = await window.mermaid.render(idRef.current, text);
+          // 创建一个临时的包裹元素来进行渲染
+          const tempContainer = document.createElement('div');
+          tempContainer.id = idRef.current;
+          tempContainer.style.display = 'none';
+          document.body.appendChild(tempContainer);
+          
+          const { svg: svgCode } = await window.mermaid.render(idRef.current, text, tempContainer);
+          
+          // 渲染完成后移除临时节点
+          if (tempContainer.parentNode) {
+            tempContainer.parentNode.removeChild(tempContainer);
+          }
+          
           setSvg(svgCode);
           setError(false);
         } catch (e) {
@@ -403,7 +415,28 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                         p: ({node, ...props}) => <div className="whitespace-pre-wrap break-words mb-1 custom-font-content" {...props} />,
                         ul: ({node, ...props}) => <ul className="list-disc pl-5 my-1" {...props} />,
                         ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-1" {...props} />,
-                        li: ({node, ...props}) => <li className="my-0.5" {...props} />,
+                        li: ({node, className, children, ...props}) => {
+                          const isTask = className && className.includes('task-list-item');
+                          return (
+                            <li className={`my-0.5 ${isTask ? 'flex items-start gap-2 list-none -ml-5' : ''}`} {...props}>
+                              {children}
+                            </li>
+                          );
+                        },
+                        input: ({node, type, checked, ...props}) => {
+                          if (type === 'checkbox') {
+                            return (
+                              <input 
+                                type="checkbox" 
+                                checked={checked} 
+                                readOnly 
+                                className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-70 cursor-not-allowed"
+                                {...props} 
+                              />
+                            );
+                          }
+                          return <input type={type} {...props} />;
+                        },
                         strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                         em: ({node, ...props}) => <em className="italic" {...props} />,
                         br: () => <br />,
@@ -462,7 +495,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                         code: ({node, className, children, ...props}) => {
                           const raw = String(children || '');
                           const text = raw.replace(/\\n/g, '\n');
-                          return <code className="px-1.5 py-0.5 mx-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-sm border border-gray-200 dark:border-gray-700" {...props}>{text}</code>;
+                          return <code className="px-1.5 py-0.5 mx-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-sm border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-words" {...props}>{text}</code>;
                         },
                       }}
                       remarkPlugins={[remarkEmojiShortcode]}

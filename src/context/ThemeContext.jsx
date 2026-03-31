@@ -9,6 +9,17 @@ export function ThemeProvider({ children }) {
   const [currentFont, setCurrentFont] = useState('default');
   const [currentFontSize, setCurrentFontSize] = useState(16);
 
+  // 监听主题颜色变化事件
+  useEffect(() => {
+    const handleThemeColorChange = (e) => {
+      if (e.detail) {
+        setThemeColor(e.detail);
+      }
+    };
+    window.addEventListener('app:themeColorChanged', handleThemeColorChange);
+    return () => window.removeEventListener('app:themeColorChanged', handleThemeColorChange);
+  }, []);
+
   // 预加载字体资源
   useEffect(() => {
     const fontUrls = {
