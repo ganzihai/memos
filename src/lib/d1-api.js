@@ -1,100 +1,143 @@
 // D1数据库API客户端，用于在Cloudflare Pages环境中访问D1数据库
 export class D1ApiClient {
-  static async getBaseUrl() {
-    // 获取当前域名
-    const currentUrl = window.location.origin;
-
-    // 如果是在workers.dev或pages.dev域名下，使用相对路径
-    if (currentUrl.includes('workers.dev') || currentUrl.includes('pages.dev')) {
-      return '';
-    }
-
-    // 否则使用完整URL
-    return currentUrl;
+  static getBaseUrl() {
+    return window.location.origin;
   }
 
-  // 初始化数据库
+  // ---------- 基础库 ----------
+
   static async initDatabase() {
     try {
-      const baseUrl = await this.getBaseUrl();
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(`${baseUrl}/api/init`, {
-        method: 'POST',
-        headers,
-      });
-
-      const result = await response.json();
-      return result;
+      const res = await fetch(`${this.getBaseUrl()}/api/init`, { method: 'POST' });
+      return await res.json();
     } catch (error) {
       console.error('初始化D1数据库失败:', error);
       return { success: false, message: error.message };
     }
   }
 
-  // 同步用户数据到D1
+  // ---------- Memo CRUD ----------
+
+  /**
+   * 单个 upsert memo
+   */
+  static async upsertMemo(memo) {
+    const now = new Date().toISOString();
+    const payload = {
+      memo_id:    memo.id,
+      content:    memo.content,
+      tags:       memo.tags || [],
+      backlinks:  Array.isArray(memo.backlinks)   ? memo.backlinks   : [],
+      audio_clips:Array.isArray(memo.audioClips)  ? memo.audioClips  : [],
+      is_public:  memo.is_public  ? 1 : 0,
+      is_pinned:  memo.is_pinned  ? 1 : 0,
+      pinned_at:  memo.pinnedAt   || null,
+      created_at: memo.createdAt  || memo.timestamp || now,
+      updated_at: memo.updatedAt  || memo.lastModified || now,
+    };
+    const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '保存memo失败');
+    return result;
+  }
+
+  /**
+   * 轻量级元数据更新（置顶状态、公开状态），不需要传整个 memo
+   * @param {string|number} memoId
+   * @param {{ is_public?: boolean, is_pinned?: boolean, pinned_at?: string|null }} meta
+   */
+  static async updateMemoMeta(memoId, meta) {
+    const payload = { memo_id: memoId, ...meta };
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return await res.json();
+    } catch (error) {
+      console.error('updateMemoMeta 失败:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * 删除 memo
+   */
+  static async deleteMemo(memoId) {
+    const res = await fetch(`${this.getBaseUrl()}/api/memos?memoId=${memoId}`, {
+      method: 'DELETE',
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '删除memo失败');
+    return result;
+  }
+
+  // ---------- 批量同步 ----------
+
+  /**
+   * 全量同步所有 memo + 设置
+   */
   static async syncUserData(data) {
     try {
-      const baseUrl = await this.getBaseUrl();
+      const now = new Date().toISOString();
 
-      // 合并普通 memos 和 pinned memos 以便全部保存到 memos 表中
+      // 合并普通 memos 和 pinned memos
       const allMemos = [...(data.memos || [])];
-      
-      // 检查并合并 pinnedMemos
-      if (data.pinnedMemos && Array.isArray(data.pinnedMemos)) {
+      if (Array.isArray(data.pinnedMemos)) {
         for (const pm of data.pinnedMemos) {
-          if (!allMemos.some(m => m.id === pm.id)) {
-            allMemos.push(pm);
-          }
+          if (!allMemos.some(m => m.id === pm.id)) allMemos.push(pm);
         }
       }
 
-      // 批量同步memos
       if (allMemos.length > 0) {
-        const now = new Date().toISOString();
-        const memosPayload = allMemos.map(memo => ({
-          memo_id: memo.id,
-          content: memo.content,
-          tags: memo.tags || [],
-          backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
-          audio_clips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
-          is_public: memo.is_public ? 1 : 0,
-          created_at: memo.timestamp || memo.createdAt || now,
-          updated_at: memo.updatedAt || memo.lastModified || memo.timestamp || memo.createdAt || now
+        const pinnedIds = new Set((data.pinnedMemos || []).map(m => String(m.id)));
+        const payload = allMemos.map(memo => ({
+          memo_id:    memo.id,
+          content:    memo.content,
+          tags:       memo.tags || [],
+          backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+          audio_clips:Array.isArray(memo.audioClips) ? memo.audioClips : [],
+          is_public:  memo.is_public  ? 1 : 0,
+          is_pinned:  (pinnedIds.has(String(memo.id)) || memo.is_pinned) ? 1 : 0,
+          pinned_at:  memo.pinnedAt   || null,
+          created_at: memo.createdAt  || memo.timestamp || now,
+          updated_at: memo.updatedAt  || memo.lastModified || now,
         }));
 
-        const response = await fetch(`${baseUrl}/api/memos`, {
+        const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(memosPayload),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         });
-
-        const result = await response.json();
-        if (!result.success) {
-          console.warn('批量同步memos失败，降级为逐个同步', result.message);
-          for (const memo of data.memos) {
-            await this.upsertMemo(memo);
+        const r = await res.json();
+        if (!r.success) {
+          // 降级逐个同步
+          for (const memo of allMemos) {
+            try { await this.upsertMemo(memo); } catch (e) {
+              console.error('逐个同步memo失败:', memo.id, e);
+            }
           }
         }
       }
 
       // 同步用户设置
       await this.upsertUserSettings({
-        pinnedMemos: data.pinnedMemos,
-        themeColor: data.themeColor,
-        darkMode: data.darkMode,
-        hitokotoConfig: data.hitokotoConfig,
-        fontConfig: data.fontConfig,
+        pinnedMemos:      data.pinnedMemos,
+        themeColor:       data.themeColor,
+        darkMode:         data.darkMode,
+        hitokotoConfig:   data.hitokotoConfig,
+        fontConfig:       data.fontConfig,
         backgroundConfig: data.backgroundConfig,
-        avatarConfig: data.avatarConfig,
-        canvasConfig: data.canvasConfig,
-        musicConfig: data.musicConfig,
-        s3Config: data.s3Config,
-        updated_at: new Date().toISOString()
+        avatarConfig:     data.avatarConfig,
+        canvasConfig:     data.canvasConfig,
+        musicConfig:      data.musicConfig,
+        s3Config:         data.s3Config,
+        updated_at:       now,
       });
 
       return { success: true, message: '数据同步到D1成功' };
@@ -104,35 +147,67 @@ export class D1ApiClient {
     }
   }
 
-  // 获取公开数据（游客模式使用）
+  // ---------- 设置 ----------
+
+  /**
+   * 局部更新置顶 ID 列表（轻量级 PATCH）
+   * @param {Array<string|number>} pinnedIds
+   */
+  static async updatePinnedIds(pinnedIds) {
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned_ids: pinnedIds }),
+      });
+      return await res.json();
+    } catch (error) {
+      console.error('updatePinnedIds 失败:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * 全量写入用户设置
+   */
+  static async upsertUserSettings(settings) {
+    const payload = {};
+    if (settings.pinnedMemos      !== undefined) payload.pinned_memos      = settings.pinnedMemos;
+    if (settings.themeColor       !== undefined) payload.theme_color       = settings.themeColor;
+    if (settings.darkMode         !== undefined) payload.dark_mode         = settings.darkMode === 'true' || settings.darkMode === true;
+    if (settings.hitokotoConfig   !== undefined) payload.hitokoto_config   = settings.hitokotoConfig;
+    if (settings.fontConfig       !== undefined) payload.font_config       = settings.fontConfig;
+    if (settings.backgroundConfig !== undefined) payload.background_config = settings.backgroundConfig;
+    if (settings.avatarConfig     !== undefined) payload.avatar_config     = settings.avatarConfig;
+    if (settings.canvasConfig     !== undefined) payload.canvas_config     = settings.canvasConfig;
+    if (settings.musicConfig      !== undefined) payload.music_config      = settings.musicConfig;
+    if (settings.s3Config         !== undefined) payload.s3_config         = settings.s3Config;
+    payload.updated_at = settings.updated_at || new Date().toISOString();
+
+    const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || '保存用户设置失败');
+    return result;
+  }
+
+  // ---------- 数据恢复 ----------
+
+  /**
+   * 获取公开数据（游客模式）
+   */
   static async getPublicData() {
     try {
-      const baseUrl = await this.getBaseUrl();
-
-      // 设置请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      // 获取公开memos
-      const memosResponse = await fetch(`${baseUrl}/api/memos?public_only=true`, {
-        method: 'GET',
-        headers,
-      });
-
-      const memosResult = await memosResponse.json();
-
-      if (!memosResult.success) {
-        throw new Error(memosResult.message || '获取公开数据失败');
-      }
-
+      const res = await fetch(`${this.getBaseUrl()}/api/memos?public_only=true`);
+      const r   = await res.json();
+      if (!r.success) throw new Error(r.error || '获取公开数据失败');
       return {
         success: true,
-        data: {
-          memos: memosResult.data || [],
-          settings: null // 游客模式不需要设置
-        },
-        message: '获取公开数据成功'
+        data: { memos: r.data || [], settings: null },
+        message: '获取公开数据成功',
       };
     } catch (error) {
       console.error('获取公开数据失败:', error);
@@ -140,43 +215,27 @@ export class D1ApiClient {
     }
   }
 
-  // 从D1恢复用户数据
+  /**
+   * 从 D1 恢复用户数据
+   */
   static async restoreUserData() {
     try {
-      const baseUrl = await this.getBaseUrl();
-
-      // 设置请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      // 获取memos
-      const memosResponse = await fetch(`${baseUrl}/api/memos`, {
-        method: 'GET',
-        headers,
-      });
-
-      const memosResult = await memosResponse.json();
-
-      // 获取用户设置
-      const settingsResponse = await fetch(`${baseUrl}/api/settings`, {
-        method: 'GET',
-        headers,
-      });
-
-      const settingsResult = await settingsResponse.json();
-
+      const base = this.getBaseUrl();
+      const [memosRes, settingsRes] = await Promise.all([
+        fetch(`${base}/api/memos`),
+        fetch(`${base}/api/settings`),
+      ]);
+      const [memosResult, settingsResult] = await Promise.all([
+        memosRes.json(),
+        settingsRes.json(),
+      ]);
       if (!memosResult.success || !settingsResult.success) {
-        throw new Error(memosResult.message || settingsResult.message || '获取数据失败');
+        throw new Error(memosResult.error || settingsResult.error || '获取数据失败');
       }
-
       return {
         success: true,
-        data: {
-          memos: memosResult.data || [],
-          settings: settingsResult.data
-        },
-        message: '从D1恢复数据成功'
+        data: { memos: memosResult.data || [], settings: settingsResult.data },
+        message: '从D1恢复数据成功',
       };
     } catch (error) {
       console.error('从D1恢复数据失败:', error);
@@ -184,156 +243,45 @@ export class D1ApiClient {
     }
   }
 
-  // 插入或更新memo
-  static async upsertMemo(memo) {
-    try {
-      const baseUrl = await this.getBaseUrl();
+  // ---------- 其他 ----------
 
-      // 设置请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      // 确保时间戳不为空，使用当前时间作为备用
-      const now = new Date().toISOString();
-      const createdAt = memo.timestamp || memo.createdAt || now;
-      const updatedAt = memo.updatedAt || memo.lastModified || memo.timestamp || memo.createdAt || now;
-
-      const response = await fetch(`${baseUrl}/api/memos`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          memo_id: memo.id,
-          content: memo.content,
-          tags: memo.tags || [],
-          backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
-          audio_clips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
-          is_public: memo.is_public ? 1 : 0, // 🔧 添加is_public字段
-          created_at: createdAt,
-          updated_at: updatedAt
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || '保存memo失败');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('保存memo失败:', error);
-      throw error;
-    }
-  }
-
-  // 插入或更新用户设置 (支持局部更新)
-  static async upsertUserSettings(settings) {
-    try {
-      const baseUrl = await this.getBaseUrl();
-
-      // 设置请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      
-      const payload = {};
-      if (settings.pinnedMemos !== undefined) payload.pinned_memos = settings.pinnedMemos;
-      if (settings.themeColor !== undefined) payload.theme_color = settings.themeColor;
-      if (settings.darkMode !== undefined) payload.dark_mode = settings.darkMode === 'true' || settings.darkMode === true;
-      if (settings.hitokotoConfig !== undefined) payload.hitokoto_config = settings.hitokotoConfig;
-      if (settings.fontConfig !== undefined) payload.font_config = settings.fontConfig;
-      if (settings.backgroundConfig !== undefined) payload.background_config = settings.backgroundConfig;
-      if (settings.avatarConfig !== undefined) payload.avatar_config = settings.avatarConfig;
-      if (settings.canvasConfig !== undefined) payload.canvas_config = settings.canvasConfig;
-      if (settings.musicConfig !== undefined) payload.music_config = settings.musicConfig;
-      if (settings.s3Config !== undefined) payload.s3_config = settings.s3Config;
-      payload.updated_at = settings.updated_at || new Date().toISOString();
-
-      const response = await fetch(`${baseUrl}/api/settings`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || '保存用户设置失败');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('保存用户设置失败:', error);
-      throw error;
-    }
-  }
-
-  // 删除memo
-  static async deleteMemo(memoId) {
-    try {
-      const baseUrl = await this.getBaseUrl();
-
-      // 设置请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(`${baseUrl}/api/memos?memoId=${memoId}`, {
-        method: 'DELETE',
-        headers,
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || '删除memo失败');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('删除memo失败:', error);
-      throw error;
-    }
-  }
-
-  // 检查D1 API是否可用
   static async checkAvailability() {
     try {
-      const baseUrl = await this.getBaseUrl();
-      const apiUrl = `${baseUrl}/api/health`;
-      console.log('正在检查D1 API可用性:', apiUrl);
+      const res = await fetch(`${this.getBaseUrl()}/api/health`);
+      if (!res.ok) return { available: false };
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return { available: false };
+      const result = await res.json();
+      return { available: result.status === 'ok' };
+    } catch {
+      return { available: false };
+    }
+  }
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+  /**
+   * 使用 sendBeacon 在页面卸载时尝试上传单个 memo（不阻塞）
+   * @param {object} memo
+   */
+  static beaconUpsertMemo(memo) {
+    try {
+      const now = new Date().toISOString();
+      const payload = JSON.stringify({
+        memo_id:    memo.id,
+        content:    memo.content,
+        tags:       memo.tags || [],
+        backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+        audio_clips:Array.isArray(memo.audioClips) ? memo.audioClips : [],
+        is_public:  memo.is_public  ? 1 : 0,
+        is_pinned:  memo.is_pinned  ? 1 : 0,
+        pinned_at:  memo.pinnedAt   || null,
+        created_at: memo.createdAt  || memo.timestamp || now,
+        updated_at: memo.updatedAt  || memo.lastModified || now,
       });
-
-      console.log('API响应状态:', response.status, response.statusText);
-
-
-      // 检查响应类型
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('API返回了非JSON响应:', contentType);
-        const text = await response.text();
-        console.error('响应内容:', text.substring(0, 200));
-        return { available: false, requiresAuth: false };
-      }
-
-      const result = await response.json();
-      console.log('API响应数据:', result);
-
-      if (result.status === 'ok') {
-        return { available: true, requiresAuth: false };
-      }
-
-      return { available: false, requiresAuth: false };
-    } catch (error) {
-      console.error('检查D1 API可用性失败:', error);
-      return { available: false, requiresAuth: false };
+      const blob = new Blob([payload], { type: 'application/json' });
+      return navigator.sendBeacon(`${this.getBaseUrl()}/api/memos`, blob);
+    } catch (e) {
+      console.warn('beaconUpsertMemo 失败:', e);
+      return false;
     }
   }
 }
