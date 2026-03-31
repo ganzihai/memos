@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
 import { buildEmojiUrl, getEmojiCategory } from '@/config/emoji';
+import remarkGfm from 'remark-gfm'; 
 
 const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   const { themeColor, currentFont } = useTheme();
