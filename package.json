@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.872.0",
-		"remark-gfm": "^4.0.1"
+		"remark-gfm": "^4.0.1",
     "@aws-sdk/lib-storage": "^3.872.0",
     "@hookform/resolvers": "^3.6.0",
     "@radix-ui/react-accordion": "^1.2.0",
