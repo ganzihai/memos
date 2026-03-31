@@ -224,9 +224,19 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           if (oldNode) oldNode.remove();
           
           // 创建一个临时的包裹元素来进行渲染
+          // ⚠️ 关键修复：Mermaid 在渲染连线和标签时，需要计算 SVG 元素的 BoundingBox (getBBox)
+          // 如果给容器设置 display: 'none'，所有的 getBBox() 都会返回 0 或者报错，导致连线乱飞或者崩溃。
+          // 解决方案：将其移出屏幕可视区域，但保持其渲染能力（visibility: hidden 或 position: absolute + left: -9999px）
           const tempContainer = document.createElement('div');
           tempContainer.id = idRef.current;
-          tempContainer.style.display = 'none';
+          tempContainer.style.position = 'absolute';
+          tempContainer.style.top = '-9999px';
+          tempContainer.style.left = '-9999px';
+          tempContainer.style.visibility = 'hidden';
+          // 确保它有足够的宽度进行布局
+          tempContainer.style.width = '1000px'; 
+          
+          // 必须添加到 document.body 才能正确计算尺寸
           document.body.appendChild(tempContainer);
           
           const { svg: svgCode } = await window.mermaid.render(idRef.current, text, tempContainer);
@@ -240,6 +250,11 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           setError(false);
         } catch (e) {
           console.error('Mermaid render error:', e);
+          // 清理可能遗留的失败节点
+          const failedNode = document.getElementById(idRef.current);
+          if (failedNode && failedNode.parentNode) {
+            failedNode.parentNode.removeChild(failedNode);
+          }
           setError(true);
         }
       }
