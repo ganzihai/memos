@@ -268,14 +268,17 @@ const Index = () => {
   }, [memos, isAuthenticated]);
 
   // ─ 筛选 ───────────────────────────────────────────────────────────────────────
+  // FIX: 搜索/标签 无命中时显示空列表（不再回退到全量）
   useEffect(() => {
     let base = isAuthenticated ? memos : memos.filter(m => m.is_public);
     if (activeTag)  base = base.filter(m => m.tags?.includes(activeTag) || m.tags?.some(t => t.startsWith(activeTag + '/')));
     if (activeDate) base = base.filter(m => (m.createdAt || m.timestamp || '').split('T')[0] === activeDate);
     const q = searchQuery.toLowerCase().trim();
     if (q) {
-      const hit = base.filter(m => m.content?.toLowerCase().includes(q) || m.tags?.some(t => t.toLowerCase().includes(q)));
-      setFilteredMemos(hit.length > 0 ? hit : base);
+      // 命中为空时直接设空列表，不再回退
+      setFilteredMemos(
+        base.filter(m => m.content?.toLowerCase().includes(q) || m.tags?.some(t => t.toLowerCase().includes(q)))
+      );
     } else {
       setFilteredMemos(base);
     }
@@ -313,9 +316,7 @@ const Index = () => {
           ? { ...m, backlinks: [...new Set([...(m.backlinks || []), id])], updatedAt: now }
           : m
       );
-      // 新 memo 放最前（置顶 memo 排在非置顶前，通过 filteredMemos 排序保证）
       const next = [obj, ...withLinks];
-      // 异步上传
       setTimeout(() => {
         uploadMemo(obj);
         linkedIds.forEach(lid => { const m = next.find(x => x.id === lid); if (m) uploadMemo(m); });
@@ -400,7 +401,6 @@ const Index = () => {
       const edited = next.find(m => m.id === memoId);
       if (edited) {
         uploadMemo(edited);
-        // 同步所有反向引用者
         next.filter(m => m.id !== memoId && m.backlinks?.includes(memoId)).forEach(uploadMemo);
       }
       _scheduleCloudSync?.('memo-edit');
@@ -561,7 +561,13 @@ const Index = () => {
 
   // ─ 日期筛选 ───────────────────────────────────────────────────────────────────
   const handleDateClick = (ds) => { setActiveDate(ds === activeDate ? null : ds); setActiveTag(null); };
-  const clearFilters    = () => { setActiveTag(null); setActiveDate(null); };
+
+  // FIX: clearFilters 同时清除搜索词，点击后恢复显示全部卡片
+  const clearFilters = () => {
+    setActiveTag(null);
+    setActiveDate(null);
+    setSearchQuery('');
+  };
 
   // ─ AI ─────────────────────────────────────────────────────────────────────────
   const callAI = async ({ actionLabel, loadingId, systemPrompt, userPrompt, onSuccess }) => {
@@ -621,9 +627,13 @@ const Index = () => {
     toast.success('已收藏并设置为背景');
   };
 
-  // ─ 派生 pinnedMemos（供子组件使用，保持向后兼容） ─────────────────────────────
-  const pinnedMemos = getPinned(memos);
-  const normalMemos = getNormal(memos);
+  // ─ 派生 pinnedMemos（从 filteredMemos 中取，保证搜索/标签筛选时同步过滤置顶卡片）
+  // FIX: 不再从全量 memos 派生，而是从当前 filteredMemos 派生，确保置顶卡片也受筛选约束
+  const filteredPinnedMemos = getPinned(filteredMemos);
+
+  // 画布/侧栏仍然使用全量（不受搜索影响）
+  const allPinnedMemos = getPinned(memos);
+  const allNormalMemos = getNormal(memos);
 
   // ─ Render ─────────────────────────────────────────────────────────────────────
   return (
@@ -635,8 +645,8 @@ const Index = () => {
 
         <LeftSidebar
           heatmapData={heatmapData}
-          memos={isAuthenticated ? normalMemos : normalMemos.filter(m => m.is_public)}
-          pinnedMemos={isAuthenticated ? pinnedMemos : pinnedMemos.filter(m => m.is_public)}
+          memos={isAuthenticated ? allNormalMemos : allNormalMemos.filter(m => m.is_public)}
+          pinnedMemos={isAuthenticated ? allPinnedMemos : allPinnedMemos.filter(m => m.is_public)}
           isLeftSidebarHidden={isLeftSidebarHidden}   setIsLeftSidebarHidden={setIsLeftSidebarHidden}
           isLeftSidebarPinned={isLeftSidebarPinned}   setIsLeftSidebarPinned={setIsLeftSidebarPinned}
           isLeftSidebarHovered={isLeftSidebarHovered}
@@ -652,7 +662,7 @@ const Index = () => {
 
         {isCanvasMode ? (
           <CanvasMode
-            memos={normalMemos} pinnedMemos={pinnedMemos}
+            memos={allNormalMemos} pinnedMemos={allPinnedMemos}
             onAddMemo={handleCanvasAddMemo}
             onUpdateMemo={handleCanvasUpdateMemo}
             onDeleteMemo={handleCanvasDeleteMemo}
@@ -667,7 +677,7 @@ const Index = () => {
             searchQuery={searchQuery}   setSearchQuery={setSearchQuery}
             newMemo={newMemo}           setNewMemo={setNewMemo}
             filteredMemos={filteredMemos}
-            pinnedMemos={pinnedMemos}
+            pinnedMemos={filteredPinnedMemos}
             activeMenuId={activeMenuId}
             editingId={editingId}       editContent={editContent}
             activeTag={activeTag}       activeDate={activeDate}
