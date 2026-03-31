@@ -21,12 +21,12 @@ import { D1ApiClient } from '@/lib/d1-api';
 import { toast } from 'sonner';
 
 const Index = () => {
-  // State management
+  // ── State ──────────────────────────────────────────────
   const [memos, setMemos] = useState([]);
   const [newMemo, setNewMemo] = useState('');
   const [filteredMemos, setFilteredMemos] = useState([]);
   const [activeTag, setActiveTag] = useState(null);
-  const [activeDate, setActiveDate] = useState(null); // 新增日期筛选状态
+  const [activeDate, setActiveDate] = useState(null);
   const [heatmapData, setHeatmapData] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -55,7 +55,6 @@ const Index = () => {
   const [pendingNewBacklinks, setPendingNewBacklinks] = useState([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [pendingNewAudioClips, setPendingNewAudioClips] = useState([]);
-  // 音乐搜索卡片
   const [musicSearchOpen, setMusicSearchOpen] = useState(false);
   const [musicSearchKeyword, setMusicSearchKeyword] = useState('');
   const [musicModal, setMusicModal] = useState({
@@ -68,268 +67,189 @@ const Index = () => {
     enableDanmaku: true,
   });
 
-  // Refs
+  // ── Refs ───────────────────────────────────────────────
   const hoverTimerRef = useRef(null);
   const menuRefs = useRef({});
   const searchInputRef = useRef(null);
   const memosContainerRef = useRef(null);
+  // 用于 beforeunload 中拿到最新的 memos/pinnedMemos
+  const memosRef = useRef(memos);
+  const pinnedMemosRef = useRef(pinnedMemos);
+  useEffect(() => { memosRef.current = memos; }, [memos]);
+  useEffect(() => { pinnedMemosRef.current = pinnedMemos; }, [pinnedMemos]);
 
-  // Context
+  // ── Context ────────────────────────────────────────────
   const { backgroundConfig, updateBackgroundConfig, aiConfig, keyboardShortcuts, musicConfig, _scheduleCloudSync } = useSettings();
   const { isAuthenticated } = usePasswordAuth();
   const [currentRandomBgUrl, setCurrentRandomBgUrl] = useState('');
 
-  // 临时：如果没有音乐 URL，可使用浏览器可播放的示例音频占位（需用户在设置里替换真实地址）
+  // ── 工具函数：触发 app:dataChanged 事件 ───────────────
+  const dispatchDataChanged = (part, extra = {}) => {
+    try {
+      window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part, ...extra } }));
+    } catch { }
+  };
+
+  // ── 工具函数：通用 localStorage 持久化 ───────────────
+  const persistLocally = (nextMemos, nextPinned) => {
+    localStorage.setItem('memos', JSON.stringify(nextMemos));
+    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+  };
+
+  // ── 初始化音乐URL ─────────────────────────────────────
   useEffect(() => {
     if (!musicModal.musicUrl) {
-      setMusicModal((m) => ({
-        ...m,
-        musicUrl: 'https://file-examples.com/storage/fe9b7a6c9f3a8b2e9b0b8d3/2017/11/file_example_MP3_700KB.mp3',
-      }));
+      setMusicModal(m => ({ ...m, musicUrl: 'https://file-examples.com/storage/fe9b7a6c9f3a8b2e9b0b8d3/2017/11/file_example_MP3_700KB.mp3' }));
     }
   }, []);
 
-  // 控制移动端侧栏打开时的页面滚动
+  // ── 页面卸载时：用 sendBeacon 抢救未同步的变更 ────────
   useEffect(() => {
-    if (isMobileSidebarOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-
-    return () => {
-      document.body.style.overflow = '';
+    if (!isAuthenticated) return;
+    const handleUnload = () => {
+      try {
+        const all = [...memosRef.current, ...pinnedMemosRef.current];
+        for (const m of all) {
+          D1ApiClient.beaconUpsertMemo(m);
+        }
+      } catch { }
     };
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
+    return () => {
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [isAuthenticated]);
+
+  // ── 移动端侧栏滚动锁 ──────────────────────────────────
+  useEffect(() => {
+    document.body.style.overflow = isMobileSidebarOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [isMobileSidebarOpen]);
 
-  // 处理左侧栏鼠标悬停事件（AI 对话或每日回顾打开时禁用）
+  // ── 左侧栏鼠标 hover ──────────────────────────────────
   useEffect(() => {
     let hoverTimer;
-
     const handleMouseMove = (e) => {
-      // 若鼠标位于禁止触发区域（如迷你播放器），不处理侧栏唤起
-      if (e.target && (e.target.closest && e.target.closest('.sidebar-hover-block'))) {
-        return;
-      }
-      if (canvasToolPanelVisible || isAIDialogOpen || isDailyReviewOpen || document.body.getAttribute('data-music-modal-open') === 'true') {
-        // 工具面板可见时禁用左侧 hover 触发逻辑
-        return;
-      }
+      if (e.target?.closest?.('.sidebar-hover-block')) return;
+      if (canvasToolPanelVisible || isAIDialogOpen || isDailyReviewOpen
+          || document.body.getAttribute('data-music-modal-open') === 'true') return;
       if (!isLeftSidebarPinned) {
         if (e.clientX < 50) {
-          // 清除之前的定时器
-          if (hoverTimer) {
-            clearTimeout(hoverTimer);
-          }
-          // 设置新的定时器，延迟显示侧栏
-          hoverTimer = setTimeout(() => {
-            setIsLeftSidebarHovered(true);
-          }, 150);
+          clearTimeout(hoverTimer);
+          hoverTimer = setTimeout(() => setIsLeftSidebarHovered(true), 150);
         } else if (e.clientX > 350 && isLeftSidebarHovered) {
-          // 清除之前的定时器
-          if (hoverTimer) {
-            clearTimeout(hoverTimer);
-          }
-          // 设置新的定时器，延迟隐藏侧栏
-          hoverTimer = setTimeout(() => {
-            setIsLeftSidebarHovered(false);
-          }, 200);
+          clearTimeout(hoverTimer);
+          hoverTimer = setTimeout(() => setIsLeftSidebarHovered(false), 200);
         }
       }
     };
-
     if (!isLeftSidebarPinned && !isAIDialogOpen && !isDailyReviewOpen) {
       document.addEventListener('mousemove', handleMouseMove);
     }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-      }
-    };
+    return () => { document.removeEventListener('mousemove', handleMouseMove); clearTimeout(hoverTimer); };
   }, [isLeftSidebarPinned, isLeftSidebarHovered, canvasToolPanelVisible, isAIDialogOpen, isDailyReviewOpen]);
 
-  // 处理右侧栏鼠标悬停事件（AI 对话或每日回顾打开时禁用）
+  // ── 右侧栏鼠标 hover ──────────────────────────────────
   useEffect(() => {
     let hoverTimer;
-
     const handleMouseMove = (e) => {
-      // 若鼠标位于禁止触发区域（如迷你播放器），不处理侧栏唤起
-      if (e.target && (e.target.closest && e.target.closest('.sidebar-hover-block'))) {
-        return;
-      }
-      if (isAIDialogOpen || isDailyReviewOpen || document.body.getAttribute('data-music-modal-open') === 'true') {
-        return;
-      }
+      if (e.target?.closest?.('.sidebar-hover-block')) return;
+      if (isAIDialogOpen || isDailyReviewOpen
+          || document.body.getAttribute('data-music-modal-open') === 'true') return;
       if (!isRightSidebarPinned) {
         if (e.clientX > window.innerWidth - 50) {
-          // 清除之前的定时器
-          if (hoverTimer) {
-            clearTimeout(hoverTimer);
-          }
-          // 设置新的定时器，延迟显示侧栏
-          hoverTimer = setTimeout(() => {
-            setIsRightSidebarHovered(true);
-          }, 150);
+          clearTimeout(hoverTimer);
+          hoverTimer = setTimeout(() => setIsRightSidebarHovered(true), 150);
         } else if (e.clientX < window.innerWidth - 350 && isRightSidebarHovered) {
-          // 清除之前的定时器
-          if (hoverTimer) {
-            clearTimeout(hoverTimer);
-          }
-          // 设置新的定时器，延迟隐藏侧栏
-          hoverTimer = setTimeout(() => {
-            setIsRightSidebarHovered(false);
-          }, 200);
+          clearTimeout(hoverTimer);
+          hoverTimer = setTimeout(() => setIsRightSidebarHovered(false), 200);
         }
       }
     };
-
     if (!isRightSidebarPinned && !isAIDialogOpen && !isDailyReviewOpen) {
       document.addEventListener('mousemove', handleMouseMove);
     }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-      }
-    };
+    return () => { document.removeEventListener('mousemove', handleMouseMove); clearTimeout(hoverTimer); };
   }, [isRightSidebarPinned, isRightSidebarHovered, isAIDialogOpen, isDailyReviewOpen]);
 
-  // 当 AI 对话或每日回顾弹窗打开时，自动收起已唤出的悬浮侧栏（不影响固定侧栏）
+  // ── 弹窗开启时收起悬浮侧栏 ───────────────────────────
   useEffect(() => {
     if (isAIDialogOpen || isDailyReviewOpen) {
-      if (!isLeftSidebarPinned && isLeftSidebarHovered) {
-        setIsLeftSidebarHovered(false);
-      }
-      if (!isRightSidebarPinned && isRightSidebarHovered) {
-        setIsRightSidebarHovered(false);
-      }
+      if (!isLeftSidebarPinned && isLeftSidebarHovered) setIsLeftSidebarHovered(false);
+      if (!isRightSidebarPinned && isRightSidebarHovered) setIsRightSidebarHovered(false);
     }
   }, [isAIDialogOpen, isDailyReviewOpen, isLeftSidebarPinned, isRightSidebarPinned, isLeftSidebarHovered, isRightSidebarHovered]);
 
-  // 监听memos列表滚动，控制回到顶部按钮显示
+  // ── 滚动监听 ──────────────────────────────────────────
   useEffect(() => {
     const container = memosContainerRef.current;
     if (!container) return;
-
-    const handleScroll = () => {
-      setShowScrollToTop(container.scrollTop > 200);
-    };
-
+    const handleScroll = () => setShowScrollToTop(container.scrollTop > 200);
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 回到顶部功能
   const scrollToTop = () => {
-    if (memosContainerRef.current) {
-      memosContainerRef.current.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }
+    memosContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 从localStorage加载数据
+  // ── 从 localStorage 初始化数据 ───────────────────────
   useEffect(() => {
     const savedMemos = localStorage.getItem('memos');
     const savedPinned = localStorage.getItem('pinnedMemos');
-    const savedLeftSidebarPinned = localStorage.getItem('isLeftSidebarPinned');
-    const savedRightSidebarPinned = localStorage.getItem('isRightSidebarPinned');
+    const savedLeftPinned = localStorage.getItem('isLeftSidebarPinned');
+    const savedRightPinned = localStorage.getItem('isRightSidebarPinned');
     const savedCanvasMode = localStorage.getItem('isCanvasMode');
     const savedCanvasState = localStorage.getItem('canvasState');
+
     let memoPositions = {};
     try {
       if (savedCanvasState) {
         const st = JSON.parse(savedCanvasState);
-        if (st && st.memoPositions && typeof st.memoPositions === 'object') memoPositions = st.memoPositions;
+        if (st?.memoPositions) memoPositions = st.memoPositions;
       }
     } catch { }
 
+    const normalizeMemo = (memo) => ({
+      id: memo.id || Date.now() + Math.random(),
+      content: memo.content || '',
+      tags: memo.tags || [],
+      timestamp:    memo.timestamp    || memo.createdAt  || new Date().toISOString(),
+      lastModified: memo.lastModified || memo.updatedAt  || new Date().toISOString(),
+      createdAt:    memo.createdAt    || memo.timestamp  || new Date().toISOString(),
+      updatedAt:    memo.updatedAt    || memo.lastModified || new Date().toISOString(),
+      backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+      audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
+      is_public:  typeof memo.is_public === 'boolean' ? memo.is_public : false,
+      is_pinned:  typeof memo.is_pinned === 'boolean' ? memo.is_pinned : false,
+      pinnedAt:   memo.pinnedAt || null,
+      canvasX: typeof memo.canvasX === 'number' ? memo.canvasX : memoPositions[memo.id]?.x,
+      canvasY: typeof memo.canvasY === 'number' ? memo.canvasY : memoPositions[memo.id]?.y,
+    });
+
     if (savedMemos) {
-      try {
-        const parsedMemos = JSON.parse(savedMemos);
-        const normalizedMemos = parsedMemos.map(memo => ({
-          id: memo.id || Date.now() + Math.random(),
-          content: memo.content || '',
-          tags: memo.tags || [],
-          timestamp: memo.timestamp || memo.createdAt || new Date().toISOString(),
-          lastModified: memo.lastModified || memo.updatedAt || new Date().toISOString(),
-          createdAt: memo.createdAt || memo.timestamp || new Date().toISOString(),
-          updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
-          backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
-          audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
-          is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false, // 为旧memo设置默认值
-          // 画布位置：优先使用 memo 自身保存的，退回到 canvasState.memoPositions
-          canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
-          canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
-        }));
-        setMemos(normalizedMemos);
-      } catch (e) {
-        console.error('Failed to parse memos from localStorage', e);
-      }
+      try { setMemos(JSON.parse(savedMemos).map(normalizeMemo)); } catch (e) { console.error(e); }
     }
-
     if (savedPinned) {
-      try {
-        const parsedPinned = JSON.parse(savedPinned);
-        const normalizedPinned = parsedPinned.map(memo => ({
-          ...memo,
-          is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false
-        }));
-        setPinnedMemos(normalizedPinned);
-      } catch (e) {
-        console.error('Failed to parse pinned memos from localStorage', e);
-      }
+      try { setPinnedMemos(JSON.parse(savedPinned).map(normalizeMemo)); } catch (e) { console.error(e); }
     }
 
-    if (savedCanvasMode !== null) {
-      try {
-        const canvasMode = JSON.parse(savedCanvasMode);
-        setIsCanvasMode(canvasMode);
-
-        // 如果处于画布模式，强制设置侧栏为非固定状态
-        if (canvasMode) {
-          setIsLeftSidebarPinned(false);
-          setIsRightSidebarPinned(false);
-        }
-      } catch (e) {
-        console.error('Failed to parse canvas mode state from localStorage', e);
-      }
+    const isCanvas = savedCanvasMode ? JSON.parse(savedCanvasMode) : false;
+    if (isCanvas) {
+      setIsCanvasMode(true);
+      setIsLeftSidebarPinned(false);
+      setIsRightSidebarPinned(false);
+    } else {
+      if (savedLeftPinned  !== null) try { setIsLeftSidebarPinned (JSON.parse(savedLeftPinned));  } catch { }
+      if (savedRightPinned !== null) try { setIsRightSidebarPinned(JSON.parse(savedRightPinned)); } catch { }
     }
 
-    if (savedLeftSidebarPinned !== null) {
-      try {
-        // 只有在非画布模式下才加载侧栏固定状态
-        if (!JSON.parse(localStorage.getItem('isCanvasMode') || 'false')) {
-          setIsLeftSidebarPinned(JSON.parse(savedLeftSidebarPinned));
-        }
-      } catch (e) {
-        console.error('Failed to parse left sidebar pinned state from localStorage', e);
-      }
-    }
-
-    if (savedRightSidebarPinned !== null) {
-      try {
-        // 只有在非画布模式下才加载侧栏固定状态
-        if (!JSON.parse(localStorage.getItem('isCanvasMode') || 'false')) {
-          setIsRightSidebarPinned(JSON.parse(savedRightSidebarPinned));
-        }
-      } catch (e) {
-        console.error('Failed to parse right sidebar pinned state from localStorage', e);
-      }
-    }
-
-    // 设置应用已加载，避免初始动画
-    setTimeout(() => {
-      setIsAppLoaded(true);
-      setIsInitialLoad(false);
-    }, 100);
+    setTimeout(() => { setIsAppLoaded(true); setIsInitialLoad(false); }, 100);
   }, []);
 
-  // 监听全局数据变更与 storage 事件，感知 SettingsContext 的恢复/合并结果并刷新本地状态
+  // ── 监听全局数据变更 (sync/restore 事件) ────────────
   useEffect(() => {
     const loadFromLocal = () => {
       try {
@@ -340,53 +260,44 @@ const Index = () => {
         try {
           if (savedCanvasState) {
             const st = JSON.parse(savedCanvasState);
-            if (st && st.memoPositions && typeof st.memoPositions === 'object') memoPositions = st.memoPositions;
+            if (st?.memoPositions) memoPositions = st.memoPositions;
           }
         } catch { }
+
+        const normalizeMemo = (memo) => ({
+          id: memo.id || Date.now() + Math.random(),
+          content: memo.content || '',
+          tags: memo.tags || [],
+          timestamp:    memo.timestamp    || memo.createdAt  || new Date().toISOString(),
+          lastModified: memo.lastModified || memo.updatedAt  || new Date().toISOString(),
+          createdAt:    memo.createdAt    || memo.timestamp  || new Date().toISOString(),
+          updatedAt:    memo.updatedAt    || memo.lastModified || new Date().toISOString(),
+          backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+          audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
+          is_public:  typeof memo.is_public === 'boolean' ? memo.is_public : false,
+          is_pinned:  typeof memo.is_pinned === 'boolean' ? memo.is_pinned : false,
+          pinnedAt:   memo.pinnedAt || null,
+          canvasX: typeof memo.canvasX === 'number' ? memo.canvasX : memoPositions[memo.id]?.x,
+          canvasY: typeof memo.canvasY === 'number' ? memo.canvasY : memoPositions[memo.id]?.y,
+        });
+
         if (savedMemos) {
-          const parsedMemos = JSON.parse(savedMemos);
-          const normalizedMemos = parsedMemos.map(memo => ({
-            id: memo.id || Date.now() + Math.random(),
-            content: memo.content || '',
-            tags: memo.tags || [],
-            timestamp: memo.timestamp || memo.createdAt || new Date().toISOString(),
-            lastModified: memo.lastModified || memo.updatedAt || new Date().toISOString(),
-            createdAt: memo.createdAt || memo.timestamp || new Date().toISOString(),
-            updatedAt: memo.updatedAt || memo.lastModified || new Date().toISOString(),
-            backlinks: Array.isArray(memo.backlinks) ? memo.backlinks : [],
-            audioClips: Array.isArray(memo.audioClips) ? memo.audioClips : [],
-            is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false, // 为旧memo设置默认值
-            canvasX: (typeof memo.canvasX === 'number' ? memo.canvasX : (memoPositions[memo.id]?.x)),
-            canvasY: (typeof memo.canvasY === 'number' ? memo.canvasY : (memoPositions[memo.id]?.y))
-          }));
-          // 仅在内容有变化时才更新，避免循环写入
-          if (JSON.stringify(normalizedMemos) !== JSON.stringify(memos)) {
-            setMemos(normalizedMemos);
-          }
+          const normalized = JSON.parse(savedMemos).map(normalizeMemo);
+          if (JSON.stringify(normalized) !== JSON.stringify(memos)) setMemos(normalized);
         }
         if (savedPinned) {
-          const parsedPinned = JSON.parse(savedPinned);
-          const normalizedPinned = parsedPinned.map(memo => ({
-            ...memo,
-            is_public: typeof memo.is_public === 'boolean' ? memo.is_public : false
-          }));
-          if (JSON.stringify(normalizedPinned) !== JSON.stringify(pinnedMemos)) {
-            setPinnedMemos(normalizedPinned);
-          }
+          const normalized = JSON.parse(savedPinned).map(normalizeMemo);
+          if (JSON.stringify(normalized) !== JSON.stringify(pinnedMemos)) setPinnedMemos(normalized);
         }
       } catch { }
     };
 
     const onDataChanged = (e) => {
-      // 只在同步/恢复类事件时重新加载，避免本地操作(如删除)触发的事件导致状态闪烁
       const part = e?.detail?.part || '';
-      if (part.includes('sync.') || part.includes('restore.') || part === 'startup') {
-        loadFromLocal();
-      }
+      if (part.includes('sync.') || part.includes('restore.') || part === 'startup') loadFromLocal();
     };
     const onStorage = (e) => {
-      if (!e || (e.key !== 'memos' && e.key !== 'pinnedMemos' && e.key !== 'canvasState')) return;
-      loadFromLocal();
+      if (e?.key === 'memos' || e?.key === 'pinnedMemos' || e?.key === 'canvasState') loadFromLocal();
     };
     window.addEventListener('app:dataChanged', onDataChanged);
     window.addEventListener('storage', onStorage);
@@ -396,601 +307,396 @@ const Index = () => {
     };
   }, [memos, pinnedMemos]);
 
-  // 将 memo 的位置信息写回到 canvasState.memoPositions（与 CanvasMode 的 shapes/viewport 持久化并存）
+  // ── 同步 memo 画布位置到 canvasState ─────────────────
   useEffect(() => {
     try {
       const positions = {};
       [...memos, ...pinnedMemos].forEach(m => {
-        if (m && typeof m.id !== 'undefined') {
-          const x = typeof m.canvasX === 'number' ? m.canvasX : undefined;
-          const y = typeof m.canvasY === 'number' ? m.canvasY : undefined;
-          if (typeof x === 'number' && typeof y === 'number') {
-            positions[m.id] = { x, y };
-          }
-        }
+        if (typeof m.canvasX === 'number' && typeof m.canvasY === 'number')
+          positions[m.id] = { x: m.canvasX, y: m.canvasY };
       });
-      const raw = localStorage.getItem('canvasState');
-      const prev = raw ? JSON.parse(raw) : {};
-      const next = { ...prev, memoPositions: positions };
-      localStorage.setItem('canvasState', JSON.stringify(next));
-      // 通知全局数据变更（仅位置变化也会触发同步）
-      try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'canvas.memoPositions' } })); } catch { }
+      const prev = (() => { try { return JSON.parse(localStorage.getItem('canvasState') || '{}'); } catch { return {}; } })();
+      localStorage.setItem('canvasState', JSON.stringify({ ...prev, memoPositions: positions }));
+      dispatchDataChanged('canvas.memoPositions');
     } catch { }
   }, [memos, pinnedMemos]);
 
-  // 保存数据到localStorage - 优化：减少不必要的同步触发
+  // ── 持久化到 localStorage ────────────────────────────
   useEffect(() => {
-    if (isInitialLoad) return; // 初始加载时不保存，避免覆盖已有数据
-    localStorage.setItem('memos', JSON.stringify(memos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(pinnedMemos));
-    // 🔧 只在数据真正变化时通知，避免频繁同步导致冲突
-    // 去掉自动触发，改为在关键操作时手动触发
+    if (isInitialLoad) return;
+    persistLocally(memos, pinnedMemos);
   }, [memos, pinnedMemos, isInitialLoad]);
 
-  // 保存侧栏固定状态到localStorage - 画布模式下不保存
-  useEffect(() => {
-    if (!isCanvasMode) {
-      localStorage.setItem('isLeftSidebarPinned', JSON.stringify(isLeftSidebarPinned));
-    }
-  }, [isLeftSidebarPinned, isCanvasMode]);
+  // 侧栏 pinned 状态
+  useEffect(() => { if (!isCanvasMode) localStorage.setItem('isLeftSidebarPinned',  JSON.stringify(isLeftSidebarPinned));  }, [isLeftSidebarPinned,  isCanvasMode]);
+  useEffect(() => { if (!isCanvasMode) localStorage.setItem('isRightSidebarPinned', JSON.stringify(isRightSidebarPinned)); }, [isRightSidebarPinned, isCanvasMode]);
 
-  useEffect(() => {
-    if (!isCanvasMode) {
-      localStorage.setItem('isRightSidebarPinned', JSON.stringify(isRightSidebarPinned));
-    }
-  }, [isRightSidebarPinned, isCanvasMode]);
-
-  // 保存画布模式状态到localStorage
+  // 画布模式
   useEffect(() => {
     localStorage.setItem('isCanvasMode', JSON.stringify(isCanvasMode));
-    try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'canvas.mode' } })); } catch { }
+    dispatchDataChanged('canvas.mode');
   }, [isCanvasMode]);
 
-  // 首次加载完成后强制发一个变更事件，便于自动同步在启动时感知
+  // 启动完成后触发一次
   useEffect(() => {
-    if (!isInitialLoad) {
-      try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail: { part: 'startup' } })); } catch { }
-    }
+    if (!isInitialLoad) dispatchDataChanged('startup');
   }, [isInitialLoad]);
 
-  // 首次未查看则自动弹出教程（本地记录，不云同步）
+  // 首次弹出教程
   useEffect(() => {
     try {
-      const seen = localStorage.getItem('hasSeenTutorialV1');
-      if (!seen) {
-        // 延迟打开，等主界面渲染稳定
+      if (!localStorage.getItem('hasSeenTutorialV1')) {
         const t = setTimeout(() => setIsTutorialOpen(true), 300);
         return () => clearTimeout(t);
       }
     } catch { }
   }, []);
 
-  // 添加新memo
+  // ── 添加新 memo ───────────────────────────────────────
   const addMemo = async () => {
-    if (newMemo.trim() === '') return;
+    if (!newMemo.trim()) return;
 
     const extractedTags = [...newMemo.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
-      .map(match => match[1])
-      .filter((tag, index, self) => self.indexOf(tag) === index)
-      .filter(tag => tag.length > 0);
+      .map(m => m[1])
+      .filter((tag, i, self) => self.indexOf(tag) === i && tag.length > 0);
 
     const newId = Date.now();
-    const nowIso = new Date().toISOString();
+    const now = new Date().toISOString();
     const newMemoObj = {
-      id: newId,
-      content: newMemo,
-      tags: extractedTags,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      timestamp: nowIso,
-      lastModified: nowIso,
-      backlinks: Array.isArray(pendingNewBacklinks) ? pendingNewBacklinks : [],
+      id: newId, content: newMemo, tags: extractedTags,
+      createdAt: now, updatedAt: now, timestamp: now, lastModified: now,
+      backlinks:  Array.isArray(pendingNewBacklinks)  ? pendingNewBacklinks  : [],
       audioClips: Array.isArray(pendingNewAudioClips) ? pendingNewAudioClips : [],
-      is_public: false // 默认为私有
+      is_public: false, is_pinned: false, pinnedAt: null,
     };
 
-    // 更新现有 memos 与 pinnedMemos，将新 memoId 写入被选目标的 backlinks（双向）
-    const linkedMemoIds = (pendingNewBacklinks || []);
-    const addLink = (list) => list.map(m => (
-      linkedMemoIds.includes(m.id)
-        ? { ...m, backlinks: Array.from(new Set([...(Array.isArray(m.backlinks) ? m.backlinks : []), newId])), updatedAt: nowIso, lastModified: nowIso }
+    // 双向更新被引用 memo 的 backlinks
+    const linkedIds = pendingNewBacklinks || [];
+    const addLink = (list) => list.map(m =>
+      linkedIds.includes(m.id)
+        ? { ...m, backlinks: Array.from(new Set([...(m.backlinks || []), newId])), updatedAt: now, lastModified: now }
         : m
-    ));
-    const updatedMemos = [newMemoObj, ...addLink(memos)];
-    const updatedPinned = addLink(pinnedMemos);
+    );
+    const nextMemos  = [newMemoObj, ...addLink(memos)];
+    const nextPinned = addLink(pinnedMemos);
 
-    // 立即更新state和localStorage
-    setMemos(updatedMemos);
-    setPinnedMemos(updatedPinned);
-    localStorage.setItem('memos', JSON.stringify(updatedMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
-
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
     setNewMemo('');
     setPendingNewBacklinks([]);
     setPendingNewAudioClips([]);
 
-    // 🔧 重要：立即触发同步，确保新memo尽快上传到D1
     if (isAuthenticated) {
-      // 1. 上传新创建的 Memo
-      D1ApiClient.upsertMemo(newMemoObj).catch(e => console.error('Atomic create failed:', e));
-      
-      // 2. 上传被更新双链的 Memo
-      if (linkedMemoIds.length > 0) {
-        linkedMemoIds.forEach(id => {
-          const m = [...updatedMemos, ...updatedPinned].find(x => x.id === id);
-          if (m) D1ApiClient.upsertMemo(m).catch(e => console.error('Atomic update linked memo failed:', e));
-        });
-      }
-      
-      if (_scheduleCloudSync) {
-        try { _scheduleCloudSync('memo-add'); } catch {}
-      }
+      // 立即原子上传新 memo
+      D1ApiClient.upsertMemo(newMemoObj).catch(e => console.error('create memo upload failed:', e));
+      // 同步被更新双链的 memo
+      linkedIds.forEach(id => {
+        const m = [...nextMemos, ...nextPinned].find(x => x.id === id);
+        if (m) D1ApiClient.upsertMemo(m).catch(e => console.error('linked memo upload failed:', e));
+      });
+      _scheduleCloudSync?.('memo-add');
     }
-
-    try {
-      window.dispatchEvent(new CustomEvent('app:dataChanged', {
-        detail: { part: 'memo.add', priority: 'high', id: newId }
-      }));
-    } catch { }
+    dispatchDataChanged('memo.add', { priority: 'high', id: newId });
   };
 
-  // 更新热力图数据
+  // ── 热力图数据 ────────────────────────────────────────
   useEffect(() => {
-    const generateHeatmapData = () => {
-      const data = [];
-      const today = new Date();
-      const memoCountByDate = {};
+    const memoCountByDate = {};
+    let all = [...memos, ...pinnedMemos];
+    if (!isAuthenticated) all = all.filter(m => m.is_public);
+    all.forEach(m => {
+      const date = (m.createdAt || m.timestamp || new Date().toISOString()).split('T')[0];
+      memoCountByDate[date] = (memoCountByDate[date] || 0) + 1;
+    });
+    const today = new Date();
+    const data = Array.from({ length: 365 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const ds = d.toISOString().split('T')[0];
+      return { date: ds, count: memoCountByDate[ds] || 0 };
+    });
+    setHeatmapData(data);
+  }, [memos, pinnedMemos, isAuthenticated]);
 
-      // 获取要统计的memo：认证用户统计全部，游客只统计公开memo
-      let memosToCount = [...memos, ...pinnedMemos];
-      if (!isAuthenticated) {
-        memosToCount = memosToCount.filter(memo => memo.is_public);
-      }
-
-      memosToCount.forEach(memo => {
-        const createdAt = memo.createdAt || memo.timestamp || new Date().toISOString();
-        const date = createdAt.split('T')[0];
-        memoCountByDate[date] = (memoCountByDate[date] || 0) + 1;
-      });
-
-      for (let i = 0; i < 365; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        data.push({
-          date: dateStr,
-          count: memoCountByDate[dateStr] || 0
-        });
-      }
-
-      return data;
-    };
-
-    setHeatmapData(generateHeatmapData());
-  }, [memos, pinnedMemos, isAuthenticated]); // 添加isAuthenticated依赖
-
-  // 统一筛选：标签 / 日期 / 搜索 / 认证状态
+  // ── 筛选 ──────────────────────────────────────────────
   useEffect(() => {
-    // 1) 基础：采用置顶 + 普通的并集，优先显示置顶（作为回退列表），并去重
     let base = [...pinnedMemos, ...memos];
     const seen = new Set();
-    base = base.filter(m => {
-      const id = String(m.id);
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
+    base = base.filter(m => { const id = String(m.id); if (seen.has(id)) return false; seen.add(id); return true; });
+    if (!isAuthenticated) base = base.filter(m => m.is_public);
+    if (activeTag) base = base.filter(m => m.tags?.includes(activeTag) || m.tags?.some(t => t.startsWith(activeTag + '/')));
+    if (activeDate) base = base.filter(m => {
+      const src = m.createdAt || m.timestamp || '';
+      return (typeof src === 'string' ? src : new Date(src).toISOString()).split('T')[0] === activeDate;
     });
-
-    // 未登录用户只能看到公开的memo
-    if (!isAuthenticated) {
-      base = base.filter(memo => memo.is_public);
-    }
-
-    if (activeTag) {
-      base = base.filter(memo => {
-        if (memo.tags?.includes(activeTag)) return true;
-        if (!activeTag.includes('/')) {
-          return memo.tags?.some(tag => tag.startsWith(activeTag + '/'));
-        }
-        return false;
-      });
-    }
-
-    if (activeDate) {
-      base = base.filter(memo => {
-        const src = memo.createdAt || memo.timestamp || '';
-        const memoDate = (typeof src === 'string' ? src : new Date(src).toISOString()).split('T')[0];
-        return memoDate === activeDate;
-      });
-    }
-
-    // 2) 关键词过滤：仅当有命中时采用；否则回退到 base
     const q = searchQuery.toLowerCase().trim();
     if (q) {
-      const searched = base.filter(memo => {
-        const contentHit = (memo.content || '').toLowerCase().includes(q);
-        const tagsHit = Array.isArray(memo.tags) && memo.tags.some(tag => (tag || '').toLowerCase().includes(q));
-        return contentHit || tagsHit;
-      });
-
-      // 如果没有任何命中，则保持 base（认为是"搜索歌曲"场景，memos 列表不变）
-      setFilteredMemos(searched.length > 0 ? searched : base);
-      return;
+      const hit = base.filter(m =>
+        m.content?.toLowerCase().includes(q) || m.tags?.some(t => t.toLowerCase().includes(q))
+      );
+      setFilteredMemos(hit.length > 0 ? hit : base);
+    } else {
+      setFilteredMemos(base);
     }
-
-    // 无关键词，直接使用 base
-    setFilteredMemos(base);
   }, [memos, pinnedMemos, activeTag, activeDate, searchQuery, isAuthenticated]);
 
-  // 处理菜单操作
+  // ── 菜单操作 ──────────────────────────────────────────
   const handleMenuAction = (e, memoId, action) => {
     e.stopPropagation();
+    const now = new Date().toISOString();
 
-    switch (action) {
-      case 'toggle-public':
-        // 切换公开状态
-        const updateMemoPublicStatus = (list) => list.map(memo =>
-          memo.id === memoId
-            ? { ...memo, is_public: !memo.is_public, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() }
-            : memo
-        );
-        const updatedMemos = updateMemoPublicStatus(memos);
-        const updatedPinnedMemos = updateMemoPublicStatus(pinnedMemos);
+    if (action === 'toggle-public') {
+      // 1. 本地更新
+      const toggle = (list) => list.map(m =>
+        m.id === memoId ? { ...m, is_public: !m.is_public, updatedAt: now, lastModified: now } : m
+      );
+      const nextMemos  = toggle(memos);
+      const nextPinned = toggle(pinnedMemos);
+      setMemos(nextMemos);
+      setPinnedMemos(nextPinned);
+      persistLocally(nextMemos, nextPinned);
 
-        setMemos(updatedMemos);
-        setPinnedMemos(updatedPinnedMemos);
+      const target = [...nextMemos, ...nextPinned].find(m => m.id === memoId);
+      toast.success(target?.is_public ? '已设为公开' : '已设为私有');
 
-        // 立即保存到localStorage以确保持久化
-        localStorage.setItem('memos', JSON.stringify(updatedMemos));
-        localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinnedMemos));
+      // 2. 立即 PATCH 元数据（轻量级，不传全量 content）
+      if (isAuthenticated && target) {
+        D1ApiClient.updateMemoMeta(memoId, { is_public: target.is_public })
+          .catch(e => {
+            console.error('updateMemoMeta(public) failed, fallback to full upsert:', e);
+            D1ApiClient.upsertMemo(target).catch(console.error);
+          });
+        _scheduleCloudSync?.('public-toggle');
+      }
+      dispatchDataChanged('memo.update', { priority: 'high', id: memoId });
 
-        // 提示用户操作成功
-        const targetMemo = [...updatedMemos, ...updatedPinnedMemos].find(m => m.id === memoId);
-        if (targetMemo) {
-          toast.success(targetMemo.is_public ? '已设为公开' : '已设为私有');
-        }
+    } else if (action === 'pin') {
+      const memoToPin = memos.find(m => m.id === memoId);
+      if (memoToPin && !pinnedMemos.some(p => p.id === memoId)) {
+        const pinned = { ...memoToPin, is_pinned: true, isPinned: true, pinnedAt: now, updatedAt: now, lastModified: now };
+        const nextPinned = [pinned, ...pinnedMemos];
+        const nextMemos  = memos.filter(m => m.id !== memoId);
+        setPinnedMemos(nextPinned);
+        setMemos(nextMemos);
+        persistLocally(nextMemos, nextPinned);
 
-        // 🔧 触发立即同步以保存公开状态变更
         if (isAuthenticated) {
-          if (targetMemo) {
-            D1ApiClient.upsertMemo(targetMemo).catch(e => console.error('Atomic update public status failed:', e));
-          }
-          if (_scheduleCloudSync) {
-            try { _scheduleCloudSync('public-status-change'); } catch {}
-          }
+          // 轻量级：只更新 memos 表的 is_pinned 字段 + settings 的置顶 ID 列表
+          const pinnedIds = nextPinned.map(m => m.id);
+          D1ApiClient.updateMemoMeta(memoId, { is_pinned: true, pinned_at: now })
+            .catch(e => console.error('updateMemoMeta(pin) failed:', e));
+          D1ApiClient.updatePinnedIds(pinnedIds)
+            .catch(e => console.error('updatePinnedIds failed:', e));
+          _scheduleCloudSync?.('memo-pin');
         }
+      }
 
-        try {
-          window.dispatchEvent(new CustomEvent('app:dataChanged', {
-            detail: { part: 'memo.update', priority: 'high', id: memoId }
-          }));
-        } catch { }
-        break;
-      case 'pin':
-        const memoToPin = memos.find(memo => memo.id === memoId);
-        if (memoToPin && !pinnedMemos.some(p => p.id === memoId)) {
-          const pinnedMemo = {
-            ...memoToPin,
-            isPinned: true,
-            pinnedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            lastModified: new Date().toISOString()
-          };
-          const nextPinned = [pinnedMemo, ...pinnedMemos];
-          const nextMemos = memos.filter(memo => memo.id !== memoId);
-          setPinnedMemos(nextPinned);
-          setMemos(nextMemos);
-          localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-          localStorage.setItem('memos', JSON.stringify(nextMemos));
-          if (isAuthenticated) {
-            D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error('Atomic pin failed:', e));
-            if (_scheduleCloudSync) {
-              try { _scheduleCloudSync('memo-pin'); } catch {}
-            }
-          }
-        }
-        break;
-      case 'unpin':
-        const memoToUnpin = pinnedMemos.find(memo => memo.id === memoId);
-        if (memoToUnpin) {
-          const unpinnedMemo = { ...memoToUnpin, isPinned: false, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
-          delete unpinnedMemo.pinnedAt;
-          const nextPinned = pinnedMemos.filter(memo => memo.id !== memoId);
-          const nextMemos = [unpinnedMemo, ...memos];
-          setMemos(nextMemos);
-          setPinnedMemos(nextPinned);
-          localStorage.setItem('memos', JSON.stringify(nextMemos));
-          localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-          if (isAuthenticated) {
-            D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error('Atomic unpin failed:', e));
-            D1ApiClient.upsertMemo(unpinnedMemo).catch(e => console.error('Atomic update memo after unpin failed:', e));
-            if (_scheduleCloudSync) {
-              try { _scheduleCloudSync('memo-unpin'); } catch {}
-            }
-          }
-        }
-        break;
-      case 'edit':
-        const memoToEdit = [...memos, ...pinnedMemos].find(memo => memo.id === memoId);
-        if (memoToEdit) {
-          setEditingId(memoId);
-          setEditContent(memoToEdit.content);
-        }
-        break;
-      case 'share':
-        const memoToShare = [...memos, ...pinnedMemos].find(memo => memo.id === memoId);
-        if (memoToShare) {
-          setSelectedMemo(memoToShare);
-          setIsShareDialogOpen(true);
-        }
-        break;
-      case 'delete':
-        // 先移除被删 memo
-        const nextMemos = memos.filter(memo => memo.id !== memoId).map(m => ({
-          ...m,
-          backlinks: Array.isArray(m.backlinks) ? m.backlinks.filter(id => id !== memoId) : []
-        }));
-        const nextPinned = pinnedMemos.filter(memo => memo.id !== memoId).map(m => ({
-          ...m,
-          backlinks: Array.isArray(m.backlinks) ? m.backlinks.filter(id => id !== memoId) : []
-        }));
+    } else if (action === 'unpin') {
+      const memoToUnpin = pinnedMemos.find(m => m.id === memoId);
+      if (memoToUnpin) {
+        const unpinned = { ...memoToUnpin, is_pinned: false, isPinned: false, pinnedAt: null, updatedAt: now, lastModified: now };
+        delete unpinned.pinnedAt;
+        const nextPinned = pinnedMemos.filter(m => m.id !== memoId);
+        const nextMemos  = [unpinned, ...memos];
         setMemos(nextMemos);
         setPinnedMemos(nextPinned);
-        localStorage.setItem('memos', JSON.stringify(nextMemos));
-        localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-        // 记录删除墓碑用于云端删除
-        addDeletedMemoTombstone(memoId);
+        persistLocally(nextMemos, nextPinned);
+
         if (isAuthenticated) {
-          D1ApiClient.deleteMemo(memoId).catch(e => console.error('Atomic delete failed:', e));
-          if (_scheduleCloudSync) {
-            try { _scheduleCloudSync('memo-delete'); } catch {}
-          }
+          const pinnedIds = nextPinned.map(m => m.id);
+          D1ApiClient.updateMemoMeta(memoId, { is_pinned: false, pinned_at: null })
+            .catch(e => console.error('updateMemoMeta(unpin) failed:', e));
+          D1ApiClient.updatePinnedIds(pinnedIds)
+            .catch(e => console.error('updatePinnedIds failed:', e));
+          // 同步 memo 本身的内容（含 is_pinned=false），避免全量同步时状态覆盖
+          D1ApiClient.upsertMemo(unpinned)
+            .catch(e => console.error('upsertMemo after unpin failed:', e));
+          _scheduleCloudSync?.('memo-unpin');
         }
-        break;
-      default:
-        break;
+      }
+
+    } else if (action === 'edit') {
+      const m = [...memos, ...pinnedMemos].find(m => m.id === memoId);
+      if (m) { setEditingId(memoId); setEditContent(m.content); }
+
+    } else if (action === 'share') {
+      const m = [...memos, ...pinnedMemos].find(m => m.id === memoId);
+      if (m) { setSelectedMemo(m); setIsShareDialogOpen(true); }
+
+    } else if (action === 'delete') {
+      const filterOut = (list) => list
+        .filter(m => m.id !== memoId)
+        .map(m => ({ ...m, backlinks: (m.backlinks || []).filter(id => id !== memoId) }));
+      const nextMemos  = filterOut(memos);
+      const nextPinned = filterOut(pinnedMemos);
+      setMemos(nextMemos);
+      setPinnedMemos(nextPinned);
+      persistLocally(nextMemos, nextPinned);
+      addDeletedMemoTombstone(memoId);
+
+      if (isAuthenticated) {
+        D1ApiClient.deleteMemo(memoId).catch(e => console.error('delete memo failed:', e));
+        _scheduleCloudSync?.('memo-delete');
+      }
     }
+
     setActiveMenuId(null);
   };
 
-  // 保存编辑
+  // ── 保存编辑 ──────────────────────────────────────────
   const saveEdit = (memoId) => {
-    const extractedTags = [...editContent.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
-      .map(match => match[1])
-      .filter((tag, index, self) => self.indexOf(tag) === index)
-      .filter(tag => tag.length > 0);
+    const tags = [...editContent.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
+      .map(m => m[1])
+      .filter((t, i, s) => s.indexOf(t) === i && t.length > 0);
+    const now = new Date().toISOString();
 
-    const updatedMemos = memos.map(memo =>
-      memo.id === memoId ? {
-        ...memo,
-        content: editContent,
-        tags: extractedTags,
-        updatedAt: new Date().toISOString(),
-        lastModified: new Date().toISOString()
-      } : memo
+    const update = (list) => list.map(m =>
+      m.id === memoId ? { ...m, content: editContent, tags, updatedAt: now, lastModified: now } : m
     );
+    const nextMemos  = update(memos);
+    const nextPinned = update(pinnedMemos);
+    setMemos(nextMemos);
+    setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
 
-    const updatedPinned = pinnedMemos.map(memo =>
-      memo.id === memoId ? {
-        ...memo,
-        content: editContent,
-        tags: extractedTags,
-        updatedAt: new Date().toISOString(),
-        lastModified: new Date().toISOString()
-      } : memo
-    );
-
-    setMemos(updatedMemos);
-    setPinnedMemos(updatedPinned);
-    
-    // 保存到 localStorage
-    localStorage.setItem('memos', JSON.stringify(updatedMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
-    
-    // 触发云同步
     if (isAuthenticated) {
-      const editedMemo = [...updatedMemos, ...updatedPinned].find(m => m.id === memoId);
-      if (editedMemo) {
-        D1ApiClient.upsertMemo(editedMemo).catch(e => console.error('Atomic update edit failed:', e));
-      }
-      if (_scheduleCloudSync) {
-        try { _scheduleCloudSync('memo-edit'); } catch {}
-      }
+      const edited = [...nextMemos, ...nextPinned].find(m => m.id === memoId);
+      if (edited) D1ApiClient.upsertMemo(edited).catch(e => console.error('edit upload failed:', e));
+      // 同步所有反向引用本条 memo 的 memo（backlinks 未变，但 updatedAt 可能影响合并）
+      [...nextMemos, ...nextPinned].forEach(m => {
+        if (m.id !== memoId && m.backlinks?.includes(memoId)) {
+          D1ApiClient.upsertMemo(m).catch(e => console.error('backlink memo upload failed:', e));
+        }
+      });
+      _scheduleCloudSync?.('memo-edit');
     }
-
     setEditingId(null);
     setEditContent('');
   };
 
-  // 取消编辑
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditContent('');
-  };
+  const cancelEdit = () => { setEditingId(null); setEditContent(''); };
 
-  // 建立双链：在 from 和 to 的 backlinks 中互相加入，避免重复
+  // ── 双链操作 ──────────────────────────────────────────
   const handleAddBacklink = (fromId, toId) => {
     if (!toId) return;
-    // 新建 memo（顶部编辑器）场景：fromId 为空，先把选中的 toId 放到待建列表
-    if (!fromId) {
-      setPendingNewBacklinks(prev => prev.includes(toId) ? prev : [...prev, toId]);
-      return;
-    }
+    if (!fromId) { setPendingNewBacklinks(prev => prev.includes(toId) ? prev : [...prev, toId]); return; }
     if (fromId === toId) return;
-    const updateOne = (memo, targetId) => {
-      const curr = Array.isArray(memo.backlinks) ? memo.backlinks : [];
-      if (curr.includes(targetId)) return curr;
-      return [...curr, targetId];
-    };
-    const nextMemos = memos.map(m => {
-      if (m.id === fromId) return { ...m, backlinks: updateOne(m, toId), updatedAt: new Date().toISOString() };
-      if (m.id === toId) return { ...m, backlinks: updateOne(m, fromId), updatedAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const add = (list) => list.map(m => {
+      if (m.id === fromId) return { ...m, backlinks: Array.from(new Set([...(m.backlinks || []), toId])), updatedAt: now };
+      if (m.id === toId)   return { ...m, backlinks: Array.from(new Set([...(m.backlinks || []), fromId])), updatedAt: now };
       return m;
     });
-    const nextPinned = pinnedMemos.map(m => {
-      if (m.id === fromId) return { ...m, backlinks: updateOne(m, toId), updatedAt: new Date().toISOString() };
-      if (m.id === toId) return { ...m, backlinks: updateOne(m, fromId), updatedAt: new Date().toISOString() };
-      return m;
-    });
-    
-    setMemos(nextMemos);
-    setPinnedMemos(nextPinned);
-    localStorage.setItem('memos', JSON.stringify(nextMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
+    const nextMemos  = add(memos);
+    const nextPinned = add(pinnedMemos);
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
+    if (isAuthenticated) {
+      [fromId, toId].forEach(id => {
+        const m = [...nextMemos, ...nextPinned].find(x => x.id === id);
+        if (m) D1ApiClient.upsertMemo(m).catch(console.error);
+      });
+      _scheduleCloudSync?.('memo-backlink');
+    }
   };
 
-  // 移除双链：从双方的 backlinks 中互相删除；顶部新建时（fromId 为空）从待建列表删除
   const handleRemoveBacklink = (fromId, toId) => {
     if (!toId) return;
-    if (!fromId) {
-      setPendingNewBacklinks(prev => prev.filter(id => id !== toId));
-      return;
-    }
+    if (!fromId) { setPendingNewBacklinks(prev => prev.filter(id => id !== toId)); return; }
     if (fromId === toId) return;
+    const now = new Date().toISOString();
     const prune = (list) => list.map(m => {
-      if (m.id === fromId) return { ...m, backlinks: (Array.isArray(m.backlinks) ? m.backlinks.filter(id => id !== toId) : []), updatedAt: new Date().toISOString() };
-      if (m.id === toId) return { ...m, backlinks: (Array.isArray(m.backlinks) ? m.backlinks.filter(id => id !== fromId) : []), updatedAt: new Date().toISOString() };
+      if (m.id === fromId) return { ...m, backlinks: (m.backlinks || []).filter(id => id !== toId),   updatedAt: now };
+      if (m.id === toId)   return { ...m, backlinks: (m.backlinks || []).filter(id => id !== fromId), updatedAt: now };
       return m;
     });
-    
-    const nextMemos = prune(memos);
+    const nextMemos  = prune(memos);
     const nextPinned = prune(pinnedMemos);
-    setMemos(nextMemos);
-    setPinnedMemos(nextPinned);
-    localStorage.setItem('memos', JSON.stringify(nextMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
+    if (isAuthenticated) _scheduleCloudSync?.('memo-backlink-remove');
   };
 
-  // 移除录音：fromId 为空表示新建 memo（移除待提交列表），否则从对应 memo 中移除下标 idx
+  // ── 录音操作 ──────────────────────────────────────────
   const handleRemoveAudioClip = (fromId, idx) => {
     if (typeof idx !== 'number') return;
-    if (!fromId) {
-      setPendingNewAudioClips((prev) => prev.filter((_, i) => i !== idx));
-      return;
+    if (!fromId) { setPendingNewAudioClips(prev => prev.filter((_, i) => i !== idx)); return; }
+    const now = new Date().toISOString();
+    const rem = (list) => list.map(m =>
+      m.id !== fromId ? m : { ...m, audioClips: (m.audioClips || []).filter((_, i) => i !== idx), updatedAt: now, lastModified: now }
+    );
+    const nextMemos  = rem(memos);
+    const nextPinned = rem(pinnedMemos);
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
+    if (isAuthenticated) {
+      const m = [...nextMemos, ...nextPinned].find(x => x.id === fromId);
+      if (m) D1ApiClient.upsertMemo(m).catch(console.error);
+      _scheduleCloudSync?.('memo-audio-remove');
     }
-    const removeFrom = (list) => list.map((m) => {
-      if (m.id !== fromId) return m;
-      const clips = Array.isArray(m.audioClips) ? m.audioClips : [];
-      const nextClips = clips.filter((_, i) => i !== idx);
-      return { ...m, audioClips: nextClips, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
-    });
-    
-    const nextMemos = removeFrom(memos);
-    const nextPinned = removeFrom(pinnedMemos);
-    setMemos(nextMemos);
-    setPinnedMemos(nextPinned);
-    localStorage.setItem('memos', JSON.stringify(nextMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
-  // 添加录音到某条 memo；fromId 为空表示当前是“新建 memo”编辑器，加入待提交列表
   const handleAddAudioClip = (fromId, clip) => {
     if (!clip) return;
-    if (!fromId) {
-      setPendingNewAudioClips(prev => [...prev, clip]);
-      return;
+    if (!fromId) { setPendingNewAudioClips(prev => [...prev, clip]); return; }
+    const now = new Date().toISOString();
+    const add = (list) => list.map(m =>
+      m.id !== fromId ? m : { ...m, audioClips: [...(m.audioClips || []), clip], updatedAt: now, lastModified: now }
+    );
+    const nextMemos  = add(memos);
+    const nextPinned = add(pinnedMemos);
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
+    if (isAuthenticated) {
+      const m = [...nextMemos, ...nextPinned].find(x => x.id === fromId);
+      if (m) D1ApiClient.upsertMemo(m).catch(console.error);
+      _scheduleCloudSync?.('memo-audio-add');
     }
-    const addTo = (list) => list.map(m => {
-      if (m.id !== fromId) return m;
-      const prev = Array.isArray(m.audioClips) ? m.audioClips : [];
-      return { ...m, audioClips: [...prev, clip], updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
-    });
-    
-    const nextMemos = addTo(memos);
-    const nextPinned = addTo(pinnedMemos);
-    setMemos(nextMemos);
-    setPinnedMemos(nextPinned);
-    localStorage.setItem('memos', JSON.stringify(nextMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('memo-update'); } catch {} }
   };
 
-  // 预览某条 memo
-  const handlePreviewMemo = (memoId) => {
-    setPreviewMemoId(memoId);
-  };
+  // ── 预览 ─────────────────────────────────────────────
+  const handlePreviewMemo = (memoId) => setPreviewMemoId(memoId);
 
-  // 处理菜单容器的鼠标事件
+  // ── 菜单悬停控制 ─────────────────────────────────────
   const handleMenuContainerEnter = (memoId) => {
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
+    clearTimeout(hoverTimerRef.current);
+    if (activeMenuId !== memoId) {
+      hoverTimerRef.current = setTimeout(() => setActiveMenuId(memoId), 300);
     }
-
-    if (activeMenuId === memoId) {
-      return;
-    }
-
-    hoverTimerRef.current = setTimeout(() => {
-      setActiveMenuId(memoId);
-    }, 300);
   };
-
   const handleMenuContainerLeave = () => {
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-    }
-
-    hoverTimerRef.current = setTimeout(() => {
-      setActiveMenuId(null);
-    }, 150);
+    clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setActiveMenuId(null), 150);
   };
-
-  // 处理点击菜单按钮
   const handleMenuButtonClick = (memoId) => {
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-
+    clearTimeout(hoverTimerRef.current);
     setActiveMenuId(activeMenuId === memoId ? null : memoId);
   };
 
-  // 点击页面其他区域关闭菜单
+  // 点击外部关闭菜单
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (activeMenuId && menuRefs.current[activeMenuId]) {
-        const menuElement = menuRefs.current[activeMenuId];
-        if (!menuElement.contains(event.target)) {
-          setActiveMenuId(null);
-        }
+      if (activeMenuId && menuRefs.current[activeMenuId] && !menuRefs.current[activeMenuId].contains(event.target)) {
+        setActiveMenuId(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeMenuId]);
 
-  // 添加Ctrl+K快捷键聚焦搜索框
+  // ── Ctrl+K 聚焦搜索框 ────────────────────────────────
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); searchInputRef.current?.focus(); } };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
   }, []);
 
-  // 画布模式切换函数
+  // ── 画布模式切换 ──────────────────────────────────────
   const handleCanvasModeToggle = useCallback(() => {
-    const newCanvasMode = !isCanvasMode;
-    setIsCanvasMode(newCanvasMode);
-
-    // 进入画布模式时自动取消固定侧栏
-    if (newCanvasMode) {
+    const next = !isCanvasMode;
+    setIsCanvasMode(next);
+    if (next) {
       setIsLeftSidebarPinned(false);
       setIsRightSidebarPinned(false);
       toast.success('已进入画布模式，侧栏已自动取消固定');
@@ -999,514 +705,216 @@ const Index = () => {
     }
   }, [isCanvasMode]);
 
-  // 自定义快捷键处理
+  // 画布模式下强制侧栏不固定
+  useEffect(() => { if (isCanvasMode) { setIsLeftSidebarPinned(false); setIsRightSidebarPinned(false); } }, [isCanvasMode]);
+  useEffect(() => { if (isCanvasMode && (isLeftSidebarPinned || isRightSidebarPinned)) { setIsLeftSidebarPinned(false); setIsRightSidebarPinned(false); } }, [isCanvasMode, isLeftSidebarPinned, isRightSidebarPinned]);
+
+  // ── 自定义快捷键 ──────────────────────────────────────
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      // 避免在输入框中触发快捷键
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-        return;
-      }
-
-      // 如果正在录制快捷键，不触发快捷键功能
-      if (e.target.closest('.shortcut-recording')) {
-        return;
-      }
-
-      // 解析快捷键
-      const parseShortcut = (shortcut) => {
-        const parts = shortcut.split('+');
-        const key = parts[parts.length - 1];
-        const ctrlKey = parts.includes('Ctrl');
-        const altKey = parts.includes('Alt');
-        const shiftKey = parts.includes('Shift');
-
-        // 处理特殊键名的映射
-        const keyMap = {
-          'Space': ' ',
-          'Tab': 'Tab',
-          'Enter': 'Enter',
-          'Escape': 'Escape',
-          'Backspace': 'Backspace',
-          'Delete': 'Delete',
-          'ArrowUp': 'ArrowUp',
-          'ArrowDown': 'ArrowDown',
-          'ArrowLeft': 'ArrowLeft',
-          'ArrowRight': 'ArrowRight',
-          'PageUp': 'PageUp',
-          'PageDown': 'PageDown',
-          'Home': 'Home',
-          'End': 'End'
-        };
-
-        const mappedKey = keyMap[key] || key;
-
-        return { key: mappedKey, ctrlKey, altKey, shiftKey };
-      };
-
-      // 检查快捷键是否匹配
-      const checkShortcut = (shortcut) => {
-        const { key, ctrlKey, altKey, shiftKey } = parseShortcut(shortcut);
-        const eCtrlKey = e.ctrlKey || e.metaKey;
-
-        return (
-          e.key === key &&
-          eCtrlKey === ctrlKey &&
-          e.altKey === altKey &&
-          e.shiftKey === shiftKey
-        );
-      };
-
-      // 切换侧栏固定状态 - 画布模式下禁用
-      if (checkShortcut(keyboardShortcuts.toggleSidebar)) {
-        if (isCanvasMode) {
-          e.preventDefault();
-          toast.info('画布模式下不可固定侧栏');
-          return;
-        }
-        e.preventDefault();
-        setIsLeftSidebarPinned(!isLeftSidebarPinned);
-        setIsRightSidebarPinned(!isRightSidebarPinned);
-        // toast.success(isLeftSidebarPinned ? '侧栏已取消固定' : '侧栏已固定');
-      }
-
-      // 打开/关闭AI对话
-      if (checkShortcut(keyboardShortcuts.openAIDialog)) {
-        e.preventDefault();
-        setIsAIDialogOpen(prev => !prev);
-        toast.success(isAIDialogOpen ? 'AI对话已关闭' : 'AI对话已打开');
-      }
-
-      // 打开设置
-      if (checkShortcut(keyboardShortcuts.openSettings)) {
-        e.preventDefault();
-        setIsSettingsOpen(true);
-        toast.success('设置已打开');
-      }
-
-      // 切换画布模式
-      if (checkShortcut(keyboardShortcuts.toggleCanvasMode)) {
-        e.preventDefault();
-        handleCanvasModeToggle();
-      }
-
-      // 打开每日回顾
-      if (checkShortcut(keyboardShortcuts.openDailyReview)) {
-        e.preventDefault();
-        setIsDailyReviewOpen(true);
-        toast.success('每日回顾已打开');
-      }
+    const parse = (shortcut) => {
+      const parts = shortcut.split('+');
+      const key   = parts[parts.length - 1];
+      const keyMap = { Space: ' ', Tab: 'Tab', Enter: 'Enter', Escape: 'Escape', Backspace: 'Backspace' };
+      return { key: keyMap[key] || key, ctrlKey: parts.includes('Ctrl'), altKey: parts.includes('Alt'), shiftKey: parts.includes('Shift') };
     };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+    const check = (shortcut, e) => {
+      const { key, ctrlKey, altKey, shiftKey } = parse(shortcut);
+      return e.key === key && (e.ctrlKey || e.metaKey) === ctrlKey && e.altKey === altKey && e.shiftKey === shiftKey;
     };
-  }, [isLeftSidebarPinned, isRightSidebarPinned, isSettingsOpen, isAIDialogOpen, keyboardShortcuts, isCanvasMode, handleCanvasModeToggle]);
+    const h = (e) => {
+      if (['INPUT','TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable || e.target.closest?.('.shortcut-recording')) return;
+      if (check(keyboardShortcuts.toggleSidebar, e)) {
+        e.preventDefault();
+        if (isCanvasMode) { toast.info('画布模式下不可固定侧栏'); return; }
+        setIsLeftSidebarPinned(p => !p);
+        setIsRightSidebarPinned(p => !p);
+      }
+      if (check(keyboardShortcuts.openAIDialog, e)) { e.preventDefault(); setIsAIDialogOpen(p => !p); }
+      if (check(keyboardShortcuts.openSettings, e)) { e.preventDefault(); setIsSettingsOpen(true); }
+      if (check(keyboardShortcuts.toggleCanvasMode, e)) { e.preventDefault(); handleCanvasModeToggle(); }
+      if (check(keyboardShortcuts.openDailyReview, e)) { e.preventDefault(); setIsDailyReviewOpen(true); }
+    };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [isLeftSidebarPinned, isRightSidebarPinned, isAIDialogOpen, keyboardShortcuts, isCanvasMode, handleCanvasModeToggle]);
 
-  // 处理热力图日期点击
-  const handleDateClick = (dateStr) => {
-    setActiveDate(dateStr === activeDate ? null : dateStr);
-    // 清除标签筛选
-    setActiveTag(null);
-  };
+  // ── 日期点击 ──────────────────────────────────────────
+  const handleDateClick = (dateStr) => { setActiveDate(dateStr === activeDate ? null : dateStr); setActiveTag(null); };
+  const clearFilters   = () => { setActiveTag(null); setActiveDate(null); };
+  const handleEditorFocus = () => setIsEditorFocused(true);
+  const handleEditorBlur  = () => setIsEditorFocused(false);
 
-  // 清除所有筛选条件
-  const clearFilters = () => {
-    setActiveTag(null);
-    setActiveDate(null);
-  };
-
-  // 处理编辑器聚焦状态
-  const handleEditorFocus = () => {
-    setIsEditorFocused(true);
-  };
-
-  const handleEditorBlur = () => {
-    setIsEditorFocused(false);
-  };
-
-  // AI续写功能
-  const handleAIContinue = async () => {
-    if (!newMemo.trim()) {
-      toast.error('请先输入一些内容');
-      return;
-    }
-
-    if (!aiConfig.enabled || !aiConfig.baseUrl || !aiConfig.apiKey) {
-      toast.error('请先在设置中启用AI功能并配置API');
-      return;
-    }
-
+  // ── AI 功能（续写 / 优化 / 对话）────────────────────
+  const callAI = async ({ actionLabel, loadingId, systemPrompt, userPrompt, onSuccess }) => {
+    if (!newMemo.trim()) { toast.error('请先输入一些内容'); return; }
+    if (!aiConfig.enabled || !aiConfig.baseUrl || !aiConfig.apiKey) { toast.error('请先在设置中启用AI功能并配置API'); return; }
     try {
-      toast.loading('AI正在续写中...', { id: 'ai-continue' });
-
-      // 确保 baseUrl 以 / 结尾，如果没有则添加
+      toast.loading(`AI正在${actionLabel}中...`, { id: loadingId });
       const baseUrl = aiConfig.baseUrl.endsWith('/') ? aiConfig.baseUrl : aiConfig.baseUrl + '/';
-      const url = `${baseUrl}chat/completions`;
-
-
-      const response = await fetch(url, {
+      const res = await fetch(`${baseUrl}chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aiConfig.apiKey}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiConfig.apiKey}` },
         body: JSON.stringify({
           model: aiConfig.model || 'gpt-3.5-turbo',
           messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的写作助手，擅长续写用户的想法和笔记。请根据用户输入的内容，自然地续写下去，保持风格一致。不要重复用户已经说过的话，而是要在此基础上进行自然的延伸和扩展。'
-            },
-            {
-              role: 'user',
-              content: `请续写以下内容，保持原有风格和语调，不要重复原文：${newMemo}`
-            }
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: userPrompt   },
           ],
-          max_tokens: 800,
-          temperature: 0.8,
-          top_p: 0.9,
-          frequency_penalty: 0.5,
-          presence_penalty: 0.3
-        })
+          max_tokens: 800, temperature: 0.8,
+        }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('AI请求失败:', errorData);
-        console.error('响应状态:', response.status, response.statusText);
-        throw new Error(errorData.error?.message || `AI请求失败 (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      // 检查响应数据结构
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('AI响应结构异常:', data);
-        toast.error('AI响应结构异常', { id: 'ai-continue' });
-        return;
-      }
-
-      const continuedText = data.choices[0].message.content;
-
-      // 确保续写内容不为空且是字符串
-      if (continuedText && typeof continuedText === 'string' && continuedText.trim()) {
-        // 去除可能的换行符前缀和多余空格
-        const trimmedContinuedText = continuedText.trim();
-
-        // 将续写内容追加到原文后面，添加适当的连接
-        const connector = newMemo.endsWith('。') || newMemo.endsWith('！') || newMemo.endsWith('？') ? ' ' : '';
-        setNewMemo(prev => prev + connector + trimmedContinuedText);
-        toast.success('AI续写完成', { id: 'ai-continue' });
-      } else {
-        console.error('AI返回内容为空或格式不正确:', continuedText);
-        toast.error('AI返回内容为空', { id: 'ai-continue' });
-      }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error?.message || `AI请求失败 (${res.status})`); }
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) { onSuccess(text); toast.success(`AI${actionLabel}完成`, { id: loadingId }); }
+      else toast.error('AI返回内容为空', { id: loadingId });
     } catch (error) {
-      console.error('AI续写失败:', error);
-      toast.error('AI续写失败，请检查API配置', { id: 'ai-continue' });
+      console.error(`AI${actionLabel}失败:`, error);
+      toast.error(`AI${actionLabel}失败，请检查API配置`, { id: loadingId });
     }
   };
 
-  // AI优化功能
-  const handleAIOptimize = async () => {
-    if (!newMemo.trim()) {
-      toast.error('请先输入一些内容');
-      return;
-    }
+  const handleAIContinue = () => callAI({
+    actionLabel: '续写', loadingId: 'ai-continue',
+    systemPrompt: '你是一个专业的写作助手，擅长续写用户的想法和笔记。请根据用户输入的内容，自然地续写下去，保持风格一致。不要重复用户已经说过的话。',
+    userPrompt: `请续写以下内容，保持原有风格和语调，不要重复原文：${newMemo}`,
+    onSuccess: (text) => {
+      const connector = newMemo.endsWith('。') || newMemo.endsWith('！') || newMemo.endsWith('？') ? ' ' : '';
+      setNewMemo(prev => prev + connector + text);
+    },
+  });
 
-    if (!aiConfig.enabled || !aiConfig.baseUrl || !aiConfig.apiKey) {
-      toast.error('请先在设置中启用AI功能并配置API');
-      return;
-    }
+  const handleAIOptimize = () => callAI({
+    actionLabel: '优化', loadingId: 'ai-optimize',
+    systemPrompt: '你是一个专业的文本优化助手，擅长改进用户的想法和笔记。请优化用户输入的内容，使其更加清晰、有条理和有表达力，但保持原意不变。',
+    userPrompt: `请优化以下内容，保持原意不变，但提升表达清晰度和逻辑性：${newMemo}`,
+    onSuccess: (text) => setNewMemo(text),
+  });
 
-    try {
-      toast.loading('AI正在优化中...', { id: 'ai-optimize' });
+  const handleAIChat = () => setIsAIDialogOpen(true);
 
-      // 确保 baseUrl 以 / 结尾，如果没有则添加
-      const baseUrl = aiConfig.baseUrl.endsWith('/') ? aiConfig.baseUrl : aiConfig.baseUrl + '/';
-      const url = `${baseUrl}chat/completions`;
-
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aiConfig.apiKey}`
-        },
-        body: JSON.stringify({
-          model: aiConfig.model || 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的文本优化助手，擅长改进用户的想法和笔记。请优化用户输入的内容，使其更加清晰、有条理和有表达力，但保持原意不变。改善语言表达，优化逻辑结构，让内容更加易读和有说服力。'
-            },
-            {
-              role: 'user',
-              content: `请优化以下内容，保持原意不变，但提升表达清晰度和逻辑性：${newMemo}`
-            }
-          ],
-          max_tokens: 800,
-          temperature: 0.7,
-          top_p: 0.9,
-          frequency_penalty: 0.3,
-          presence_penalty: 0.1
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('AI请求失败:', errorData);
-        console.error('响应状态:', response.status, response.statusText);
-        throw new Error(errorData.error?.message || `AI请求失败 (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      // 检查响应数据结构
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('AI响应结构异常:', data);
-        toast.error('AI响应结构异常', { id: 'ai-optimize' });
-        return;
-      }
-
-      const optimizedText = data.choices[0].message.content;
-
-      // 确保优化内容不为空且是字符串
-      if (optimizedText && typeof optimizedText === 'string' && optimizedText.trim()) {
-        // 去除可能的换行符前缀和后缀
-        const trimmedOptimizedText = optimizedText.trim();
-
-        // 将优化内容替换原文
-        setNewMemo(trimmedOptimizedText);
-        toast.success('AI优化完成', { id: 'ai-optimize' });
-      } else {
-        console.error('AI返回内容为空或格式不正确:', optimizedText);
-        toast.error('AI返回内容为空', { id: 'ai-optimize' });
-      }
-    } catch (error) {
-      console.error('AI优化失败:', error);
-      toast.error('AI优化失败，请检查API配置', { id: 'ai-optimize' });
-    }
-  };
-
-  // AI对话功能
-  const handleAIChat = () => {
-    setIsAIDialogOpen(true);
-  };
-
-  // 监听画布模式变化，确保在画布模式下侧栏始终为非固定状态
-  useEffect(() => {
-    if (isCanvasMode) {
-      setIsLeftSidebarPinned(false);
-      setIsRightSidebarPinned(false);
-    }
-  }, [isCanvasMode]);
-
-  // 额外的监听器，防止在画布模式下侧栏被意外固定
-  useEffect(() => {
-    if (isCanvasMode && (isLeftSidebarPinned || isRightSidebarPinned)) {
-      setIsLeftSidebarPinned(false);
-      setIsRightSidebarPinned(false);
-    }
-  }, [isCanvasMode, isLeftSidebarPinned, isRightSidebarPinned]);
-
-  // 画布模式相关函数
+  // ── 画布操作 ──────────────────────────────────────────
   const handleCanvasAddMemo = (memo) => {
-    let nextPinned = pinnedMemos;
-    let nextMemos = memos;
-    // 检查是否为空内容，如果是则添加到pinnedMemos以便编辑
+    const now = new Date().toISOString();
     if (!memo.content.trim()) {
-      const pinnedMemo = {
-        ...memo,
-        isPinned: true,
-        pinnedAt: new Date().toISOString()
-      };
-      nextPinned = [pinnedMemo, ...pinnedMemos];
+      const pinned = { ...memo, is_pinned: true, isPinned: true, pinnedAt: now };
+      const nextPinned = [pinned, ...pinnedMemos];
       setPinnedMemos(nextPinned);
-      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-      if (isAuthenticated) {
-        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
-      }
+      persistLocally(memos, nextPinned);
+      if (isAuthenticated) D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: now }).catch(console.error);
     } else {
-      nextMemos = [memo, ...memos];
+      const nextMemos = [memo, ...memos];
       setMemos(nextMemos);
-      localStorage.setItem('memos', JSON.stringify(nextMemos));
-      if (isAuthenticated) {
-        D1ApiClient.upsertMemo(memo).catch(e => console.error(e));
-      }
+      persistLocally(nextMemos, pinnedMemos);
+      if (isAuthenticated) D1ApiClient.upsertMemo(memo).catch(console.error);
     }
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-add'); } catch {} }
+    _scheduleCloudSync?.('canvas-add');
   };
 
   const handleCanvasUpdateMemo = (id, updates) => {
-    // 更新memos
-    const updatedMemos = memos.map(memo =>
-      memo.id === id ? { ...memo, ...updates, updatedAt: new Date().toISOString() } : memo
-    );
-
-    // 更新pinnedMemos
-    const updatedPinned = pinnedMemos.map(memo =>
-      memo.id === id ? { ...memo, ...updates, updatedAt: new Date().toISOString() } : memo
-    );
-
-    setMemos(updatedMemos);
-    setPinnedMemos(updatedPinned);
-    localStorage.setItem('memos', JSON.stringify(updatedMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
-    
+    const now = new Date().toISOString();
+    const upd = (list) => list.map(m => m.id === id ? { ...m, ...updates, updatedAt: now } : m);
+    const nextMemos  = upd(memos);
+    const nextPinned = upd(pinnedMemos);
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
     if (isAuthenticated) {
-      const editedMemo = [...updatedMemos, ...updatedPinned].find(m => m.id === id);
-      if (editedMemo) {
-        if (editedMemo.isPinned) {
-          D1ApiClient.upsertUserSettings({ pinnedMemos: updatedPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
-        } else {
-          D1ApiClient.upsertMemo(editedMemo).catch(e => console.error(e));
-        }
-      }
-      if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-update'); } catch {} }
+      const m = [...nextMemos, ...nextPinned].find(x => x.id === id);
+      if (m) D1ApiClient.upsertMemo(m).catch(console.error);
+      _scheduleCloudSync?.('canvas-update');
     }
   };
 
   const handleCanvasDeleteMemo = (id) => {
-    const nextMemos = memos.filter(memo => memo.id !== id);
-    const nextPinned = pinnedMemos.filter(memo => memo.id !== id);
-    setMemos(nextMemos);
-    setPinnedMemos(nextPinned);
-    localStorage.setItem('memos', JSON.stringify(nextMemos));
-    localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    const nextMemos  = memos.filter(m => m.id !== id);
+    const nextPinned = pinnedMemos.filter(m => m.id !== id);
+    setMemos(nextMemos); setPinnedMemos(nextPinned);
+    persistLocally(nextMemos, nextPinned);
     addDeletedMemoTombstone(id);
-    if (isAuthenticated) {
-      D1ApiClient.deleteMemo(id).catch(e => console.error(e));
-      if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-delete'); } catch {} }
-    }
+    if (isAuthenticated) { D1ApiClient.deleteMemo(id).catch(console.error); _scheduleCloudSync?.('canvas-delete'); }
   };
 
   const handleCanvasTogglePin = (id) => {
-    const memoInMemos = memos.find(memo => memo.id === id);
-    const memoInPinned = pinnedMemos.find(memo => memo.id === id);
-
-    if (memoInMemos) {
-      // 从普通memos移动到pinnedMemos
-      const pinnedMemo = {
-        ...memoInMemos,
-        isPinned: true,
-        pinnedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastModified: new Date().toISOString()
-      };
-      const nextPinned = [pinnedMemo, ...pinnedMemos];
-      const nextMemos = memos.filter(memo => memo.id !== id);
-      setPinnedMemos(nextPinned);
-      setMemos(nextMemos);
-      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-      localStorage.setItem('memos', JSON.stringify(nextMemos));
+    const now = new Date().toISOString();
+    const inMemos  = memos.find(m => m.id === id);
+    const inPinned = pinnedMemos.find(m => m.id === id);
+    if (inMemos) {
+      const pinned = { ...inMemos, is_pinned: true, isPinned: true, pinnedAt: now, updatedAt: now, lastModified: now };
+      const nextPinned = [pinned, ...pinnedMemos];
+      const nextMemos  = memos.filter(m => m.id !== id);
+      setPinnedMemos(nextPinned); setMemos(nextMemos);
+      persistLocally(nextMemos, nextPinned);
       if (isAuthenticated) {
-        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
-        if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-pin'); } catch {} }
+        const ids = nextPinned.map(m => m.id);
+        D1ApiClient.updateMemoMeta(id, { is_pinned: true, pinned_at: now }).catch(console.error);
+        D1ApiClient.updatePinnedIds(ids).catch(console.error);
+        _scheduleCloudSync?.('canvas-pin');
       }
-    } else if (memoInPinned) {
-      // 从pinnedMemos移动到普通memos
-      const unpinnedMemo = { ...memoInPinned, isPinned: false, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
-      delete unpinnedMemo.pinnedAt;
-      const nextMemos = [unpinnedMemo, ...memos];
-      const nextPinned = pinnedMemos.filter(memo => memo.id !== id);
-      setMemos(nextMemos);
-      setPinnedMemos(nextPinned);
-      localStorage.setItem('memos', JSON.stringify(nextMemos));
-      localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+    } else if (inPinned) {
+      const unpinned = { ...inPinned, is_pinned: false, isPinned: false, pinnedAt: null, updatedAt: now, lastModified: now };
+      delete unpinned.pinnedAt;
+      const nextMemos  = [unpinned, ...memos];
+      const nextPinned = pinnedMemos.filter(m => m.id !== id);
+      setMemos(nextMemos); setPinnedMemos(nextPinned);
+      persistLocally(nextMemos, nextPinned);
       if (isAuthenticated) {
-        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
-        D1ApiClient.upsertMemo(unpinnedMemo).catch(e => console.error(e));
-        if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-unpin'); } catch {} }
+        const ids = nextPinned.map(m => m.id);
+        D1ApiClient.updateMemoMeta(id, { is_pinned: false, pinned_at: null }).catch(console.error);
+        D1ApiClient.updatePinnedIds(ids).catch(console.error);
+        D1ApiClient.upsertMemo(unpinned).catch(console.error);
+        _scheduleCloudSync?.('canvas-unpin');
       }
     }
   };
 
-  // 当启用随机背景且没有自定义图片时，拉取一次随机图片
+  // ── 随机背景 ──────────────────────────────────────────
   useEffect(() => {
-    const shouldUseRandom = backgroundConfig?.useRandom && !backgroundConfig?.imageUrl;
-    if (!shouldUseRandom) {
-      setCurrentRandomBgUrl('');
-      return;
-    }
-    let aborted = false;
-    // 避免重复请求：已有则不再请求
+    if (!backgroundConfig?.useRandom || backgroundConfig?.imageUrl) { setCurrentRandomBgUrl(''); return; }
     if (currentRandomBgUrl) return;
+    let aborted = false;
     (async () => {
       try {
-        // 优先通过本地代理获取 data URL，避免跨域与防盗链问题
         const api = '/api/proxy-fetch?url=' + encodeURIComponent('https://imgapi.xl0408.top/index.php');
         const res = await fetch(api);
         if (res.ok) {
           const data = await res.json().catch(() => null);
-          const dataUrl = data?.dataUrl;
-          if (!aborted && dataUrl) {
-            setCurrentRandomBgUrl(dataUrl);
-            return;
-          }
+          if (!aborted && data?.dataUrl) { setCurrentRandomBgUrl(data.dataUrl); return; }
         }
-        // 退化：直接使用远端地址
         if (!aborted) setCurrentRandomBgUrl('https://imgapi.xl0408.top/index.php');
-      } catch (_) {
-        // 忽略失败
-      }
+      } catch { }
     })();
     return () => { aborted = true; };
   }, [backgroundConfig?.useRandom, backgroundConfig?.imageUrl, currentRandomBgUrl]);
 
-  // 生成背景样式 - 亮度滤镜只应用于背景图片
   const effectiveBgUrl = backgroundConfig.imageUrl || (backgroundConfig.useRandom ? currentRandomBgUrl : '');
   const backgroundStyle = effectiveBgUrl ? {
-    backgroundImage: `url(${effectiveBgUrl})`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
+    backgroundImage: `url(${effectiveBgUrl})`, backgroundSize: 'cover',
+    backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
     filter: `brightness(${backgroundConfig.brightness}%)`,
   } : {};
-
   const overlayStyle = effectiveBgUrl ? {
     backdropFilter: `blur(${backgroundConfig.blur}px)`,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   } : {};
 
-  // 收藏当前随机背景
   const handleFavoriteRandomBackground = () => {
-    const url = currentRandomBgUrl;
-    if (!backgroundConfig.useRandom || backgroundConfig.imageUrl) return;
-    if (!url) return;
-    updateBackgroundConfig({ imageUrl: url, useRandom: false });
-    try { toast.success('已收藏并设置为背景'); } catch { }
+    if (!backgroundConfig.useRandom || backgroundConfig.imageUrl || !currentRandomBgUrl) return;
+    updateBackgroundConfig({ imageUrl: currentRandomBgUrl, useRandom: false });
+    toast.success('已收藏并设置为背景');
   };
 
+  // ── Render ────────────────────────────────────────────
   return (
-    <div
-      className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col lg:flex-row lg:overflow-hidden lg:h-screen relative"
-    >
-      {/* 背景图片层 - 亮度滤镜只应用于此层 */}
-      {effectiveBgUrl && (
-        <div
-          className="absolute inset-0 z-0"
-          style={backgroundStyle}
-        />
-      )}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col lg:flex-row lg:overflow-hidden lg:h-screen relative">
+      {effectiveBgUrl && <div className="absolute inset-0 z-0" style={backgroundStyle} />}
+      {effectiveBgUrl && <div className="absolute inset-0 z-0" style={overlayStyle} />}
 
-      {/* 背景遮罩层 */}
-      {effectiveBgUrl && (
-        <div
-          className="absolute inset-0 z-0"
-          style={overlayStyle}
-        />
-      )}
-
-      {/* 主内容区域 */}
       <div className="relative z-10 min-h-screen lg:h-full w-full flex flex-col lg:flex-row">
 
-        {/* 左侧热力图区域 */}
         <LeftSidebar
           heatmapData={heatmapData}
-          memos={isAuthenticated ? memos : memos.filter(memo => memo.is_public)}
-          pinnedMemos={isAuthenticated ? pinnedMemos : pinnedMemos.filter(memo => memo.is_public)}
+          memos={isAuthenticated ? memos : memos.filter(m => m.is_public)}
+          pinnedMemos={isAuthenticated ? pinnedMemos : pinnedMemos.filter(m => m.is_public)}
           isLeftSidebarHidden={isLeftSidebarHidden}
           setIsLeftSidebarHidden={setIsLeftSidebarHidden}
           isLeftSidebarPinned={isLeftSidebarPinned}
@@ -1524,7 +932,6 @@ const Index = () => {
           isAuthenticated={isAuthenticated}
         />
 
-        {/* 中央主内容区 */}
         {isCanvasMode ? (
           <CanvasMode
             memos={memos}
@@ -1537,15 +944,12 @@ const Index = () => {
           />
         ) : (
           <MainContent
-            // Layout state
             isLeftSidebarHidden={isLeftSidebarHidden}
             isRightSidebarHidden={isRightSidebarHidden}
             setIsLeftSidebarHidden={setIsLeftSidebarHidden}
             setIsRightSidebarHidden={setIsRightSidebarHidden}
             isLeftSidebarPinned={isLeftSidebarPinned}
             isRightSidebarPinned={isRightSidebarPinned}
-
-            // Data
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             newMemo={newMemo}
@@ -1556,15 +960,11 @@ const Index = () => {
             editingId={editingId}
             editContent={editContent}
             activeTag={activeTag}
-            activeDate={activeDate} // 传递日期筛选状态
+            activeDate={activeDate}
             showScrollToTop={showScrollToTop}
-
-            // Refs
             searchInputRef={searchInputRef}
             memosContainerRef={memosContainerRef}
             menuRefs={menuRefs}
-
-            // Callbacks
             onMobileMenuOpen={() => setIsMobileSidebarOpen(true)}
             onAddMemo={addMemo}
             onMenuAction={handleMenuAction}
@@ -1576,33 +976,24 @@ const Index = () => {
             onCancelEdit={cancelEdit}
             onTagClick={setActiveTag}
             onScrollToTop={scrollToTop}
-            clearFilters={clearFilters} // 传递清除筛选函数
+            clearFilters={clearFilters}
             onEditorFocus={handleEditorFocus}
             onEditorBlur={handleEditorBlur}
-            // backlinks props
             allMemos={[...memos, ...pinnedMemos]}
             onAddBacklink={handleAddBacklink}
             onPreviewMemo={handlePreviewMemo}
             pendingNewBacklinks={pendingNewBacklinks}
             onRemoveBacklink={handleRemoveBacklink}
-            // audio props
             pendingNewAudioClips={pendingNewAudioClips}
             onRemoveAudioClip={handleRemoveAudioClip}
             onAddAudioClip={handleAddAudioClip}
-            onOpenMusic={() => {
-              if (musicConfig?.enabled) setMusicModal((m) => ({ ...m, isOpen: true }));
-            }}
+            onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal(m => ({ ...m, isOpen: true })); }}
             musicEnabled={!!musicConfig?.enabled}
-            onOpenMusicSearch={(q) => {
-              setMusicSearchKeyword(q);
-              setMusicSearchOpen(true);
-            }}
-            // 认证状态
+            onOpenMusicSearch={(q) => { setMusicSearchKeyword(q); setMusicSearchOpen(true); }}
             isAuthenticated={isAuthenticated}
           />
         )}
 
-        {/* 右侧标签管理区 */}
         <RightSidebar
           memos={[...memos, ...pinnedMemos]}
           activeTag={activeTag}
@@ -1618,86 +1009,43 @@ const Index = () => {
         />
       </div>
 
-      {/* 移动端侧栏 */}
       <MobileSidebar
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
         heatmapData={heatmapData}
-        memos={isAuthenticated ? [...memos, ...pinnedMemos] : [...memos, ...pinnedMemos].filter(memo => memo.is_public)}
+        memos={isAuthenticated ? [...memos, ...pinnedMemos] : [...memos, ...pinnedMemos].filter(m => m.is_public)}
         activeTag={activeTag}
         setActiveTag={(tag) => { setActiveTag(tag); setActiveDate(null); }}
         onSettingsOpen={() => setIsSettingsOpen(true)}
         onDateClick={handleDateClick}
         isAuthenticated={isAuthenticated}
-        onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal((m) => ({ ...m, isOpen: true })); }}
+        onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal(m => ({ ...m, isOpen: true })); }}
       />
 
-      {/* 设置卡片 */}
-      <SettingsCard
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onOpenTutorial={() => setIsTutorialOpen(true)}
-      />
-
-      {/* 分享图对话框 */}
-      <ShareDialog
-        isOpen={isShareDialogOpen}
-        onClose={() => setIsShareDialogOpen(false)}
-        memo={selectedMemo}
-      />
-
-      {/* AI对话框 */}
-      <AIDialog
-        isOpen={isAIDialogOpen}
-        onClose={() => setIsAIDialogOpen(false)}
-        memos={[...memos, ...pinnedMemos]}
-      />
-
-      {/* 每日回顾弹窗 */}
-      <DailyReview
-        isOpen={isDailyReviewOpen}
-        onClose={() => setIsDailyReviewOpen(false)}
-        memos={[...memos, ...pinnedMemos]}
-      />
-
-      {/* 教程弹窗 */}
-      <TutorialDialog
-        isOpen={isTutorialOpen}
-        onClose={() => setIsTutorialOpen(false)}
-      />
-
-      {/* 预览弹窗 */}
+      <SettingsCard isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onOpenTutorial={() => setIsTutorialOpen(true)} />
+      <ShareDialog   isOpen={isShareDialogOpen} onClose={() => setIsShareDialogOpen(false)} memo={selectedMemo} />
+      <AIDialog      isOpen={isAIDialogOpen}    onClose={() => setIsAIDialogOpen(false)}    memos={[...memos, ...pinnedMemos]} />
+      <DailyReview   isOpen={isDailyReviewOpen} onClose={() => setIsDailyReviewOpen(false)} memos={[...memos, ...pinnedMemos]} />
+      <TutorialDialog isOpen={isTutorialOpen}   onClose={() => setIsTutorialOpen(false)} />
       <MemoPreviewDialog
-        memo={([...memos, ...pinnedMemos].find(m => m.id === previewMemoId)) || null}
+        memo={[...memos, ...pinnedMemos].find(m => m.id === previewMemoId) || null}
         open={!!previewMemoId}
         onClose={() => setPreviewMemoId(null)}
       />
 
-      {/* 音乐功能（受全局开关控制） */}
       {musicConfig?.enabled && (
         <>
           <MusicModal
             isOpen={musicModal.isOpen}
-            onClose={() => setMusicModal((m) => ({ ...m, isOpen: false }))}
+            onClose={() => setMusicModal(m => ({ ...m, isOpen: false }))}
             danmakuText={musicModal.danmakuText}
             enableDanmaku={musicModal.enableDanmaku}
           />
-          {/* 在画布模式下禁用迷你音乐播放器，避免与右下角操作按钮重叠 */}
-          {!isCanvasMode && (
-            <MiniMusicPlayer
-              onOpenFull={() => setMusicModal((m) => ({ ...m, isOpen: true }))}
-            />
-          )}
-          {/* 音乐搜索卡片 */}
-          <MusicSearchCard
-            open={musicSearchOpen}
-            keyword={musicSearchKeyword}
-            onClose={() => setMusicSearchOpen(false)}
-          />
+          {!isCanvasMode && <MiniMusicPlayer onOpenFull={() => setMusicModal(m => ({ ...m, isOpen: true }))} />}
+          <MusicSearchCard open={musicSearchOpen} keyword={musicSearchKeyword} onClose={() => setMusicSearchOpen(false)} />
         </>
       )}
 
-      {/* AI按钮 - 在画布模式下不显示，未登录用户也不显示 */}
       {!isCanvasMode && isAuthenticated && (
         <AIButton
           isSettingsOpen={isSettingsOpen}
