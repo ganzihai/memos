@@ -538,8 +538,12 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                           const text = raw.replace(/\\n/g, '\n');
                           return <code className="px-1.5 py-0.5 mx-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-sm border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-words" {...props}>{text}</code>;
                         },
+                        table: ({node, ...props}) => <div className="overflow-x-auto my-2"><table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-700 rounded" {...props} /></div>,
+                        thead: ({node, ...props}) => <thead className="bg-gray-50 dark:bg-gray-800" {...props} />,
+                        th: ({node, ...props}) => <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b dark:border-gray-700" {...props} />,
+                        td: ({node, ...props}) => <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700" {...props} />,
                       }}
-                      remarkPlugins={[remarkEmojiShortcode]}
+                      remarkPlugins={[remarkGfm, remarkEmojiShortcode]}
                       rehypePlugins={[]}
                     >
                       {renderMarkdownText(segments[0].value)}
@@ -601,7 +605,28 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                               p: ({node, ...props}) => <div className="whitespace-pre-wrap break-words mb-1 custom-font-content" {...props} />,
                               ul: ({node, ...props}) => <ul className="list-disc pl-5 my-1" {...props} />,
                               ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-1" {...props} />,
-                              li: ({node, ...props}) => <li className="my-0.5" {...props} />,
+                              li: ({node, className, children, ...props}) => {
+                                const isTask = className && className.includes('task-list-item');
+                                return (
+                                  <li className={`my-0.5 ${isTask ? 'flex items-start gap-2 list-none -ml-5' : ''}`} {...props}>
+                                    {children}
+                                  </li>
+                                );
+                              },
+                              input: ({node, type, checked, ...props}) => {
+                                if (type === 'checkbox') {
+                                  return (
+                                    <input 
+                                      type="checkbox" 
+                                      checked={checked} 
+                                      readOnly 
+                                      className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-70 cursor-not-allowed"
+                                      {...props} 
+                                    />
+                                  );
+                                }
+                                return <input type={type} {...props} />;
+                              },
                               strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                               em: ({node, ...props}) => <em className="italic" {...props} />,
                               br: () => <br />,
@@ -634,16 +659,40 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                                 }
                                 return <img {...props} />;
                               },
-                              code: ({inline, className, children, ...props}) => {
-                                const raw = String(children || '');
-                                const text = raw.replace(/\\n/g, '\n');
-                                if (inline) return <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800" {...props}>{text}</code>;
-                                const m = /language-([\w-]+)/.exec(className || '');
+                              pre: ({node, children, ...props}) => {
+                                // Extract code element from pre children
+                                let codeElement = children;
+                                if (Array.isArray(children)) {
+                                  codeElement = children.find(c => c && c.type === 'code');
+                                }
+                                if (!codeElement || !codeElement.props) {
+                                  return <pre {...props}>{children}</pre>;
+                                }
+                                
+                                const codeProps = codeElement.props;
+                                const raw = String(codeProps.children || '');
+                                const text = raw.replace(/\\n/g, '\n').replace(/\n$/, '');
+                                const className = codeProps.className || '';
+                                const m = /language-([\w-]+)/.exec(className);
                                 const lang = m ? m[1] : null;
+                                
+                                if (lang === 'mermaid') {
+                                  return <MermaidBlock text={text} />;
+                                }
+                                
                                 return <CodeBlock text={text} lang={lang} />;
                               },
-                            }}
-                            remarkPlugins={[remarkEmojiShortcode]}
+                              code: ({node, className, children, ...props}) => {
+                                  const raw = String(children || '');
+                                  const text = raw.replace(/\\n/g, '\n');
+                                  return <code className="px-1.5 py-0.5 mx-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono text-sm border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-words" {...props}>{text}</code>;
+                                },
+                                table: ({node, ...props}) => <div className="overflow-x-auto my-2"><table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-700 rounded" {...props} /></div>,
+                                thead: ({node, ...props}) => <thead className="bg-gray-50 dark:bg-gray-800" {...props} />,
+                                th: ({node, ...props}) => <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b dark:border-gray-700" {...props} />,
+                                td: ({node, ...props}) => <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700" {...props} />,
+                              }}
+                            remarkPlugins={[remarkGfm, remarkEmojiShortcode]}
                             rehypePlugins={[]}
                           >
                             {renderMarkdownText(inner)}

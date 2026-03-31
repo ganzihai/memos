@@ -227,7 +227,7 @@ export class D1ApiClient {
     }
   }
 
-  // 插入或更新用户设置
+  // 插入或更新用户设置 (支持局部更新)
   static async upsertUserSettings(settings) {
     try {
       const baseUrl = await this.getBaseUrl();
@@ -236,23 +236,24 @@ export class D1ApiClient {
       const headers = {
         'Content-Type': 'application/json',
       };
+      
+      const payload = {};
+      if (settings.pinnedMemos !== undefined) payload.pinned_memos = settings.pinnedMemos;
+      if (settings.themeColor !== undefined) payload.theme_color = settings.themeColor;
+      if (settings.darkMode !== undefined) payload.dark_mode = settings.darkMode === 'true' || settings.darkMode === true;
+      if (settings.hitokotoConfig !== undefined) payload.hitokoto_config = settings.hitokotoConfig;
+      if (settings.fontConfig !== undefined) payload.font_config = settings.fontConfig;
+      if (settings.backgroundConfig !== undefined) payload.background_config = settings.backgroundConfig;
+      if (settings.avatarConfig !== undefined) payload.avatar_config = settings.avatarConfig;
+      if (settings.canvasConfig !== undefined) payload.canvas_config = settings.canvasConfig;
+      if (settings.musicConfig !== undefined) payload.music_config = settings.musicConfig;
+      if (settings.s3Config !== undefined) payload.s3_config = settings.s3Config;
+      payload.updated_at = settings.updated_at || new Date().toISOString();
 
       const response = await fetch(`${baseUrl}/api/settings`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          pinned_memos: settings.pinnedMemos,
-          theme_color: settings.themeColor,
-          dark_mode: settings.darkMode === 'true',
-          hitokoto_config: settings.hitokotoConfig,
-          font_config: settings.fontConfig,
-          background_config: settings.backgroundConfig,
-          avatar_config: settings.avatarConfig,
-          canvas_config: settings.canvasConfig,
-          music_config: settings.musicConfig,
-          s3_config: settings.s3Config,
-          updated_at: settings.updated_at
-        }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();

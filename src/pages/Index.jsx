@@ -17,6 +17,7 @@ import MusicSearchCard from '@/components/MusicSearchCard';
 import { useSettings } from '@/context/SettingsContext';
 import { usePasswordAuth } from '@/context/PasswordAuthContext';
 import { addDeletedMemoTombstone } from '@/lib/utils';
+import { D1ApiClient } from '@/lib/d1-api';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -489,9 +490,10 @@ const Index = () => {
     };
 
     // 更新现有 memos 与 pinnedMemos，将新 memoId 写入被选目标的 backlinks（双向）
+    const linkedMemoIds = (pendingNewBacklinks || []);
     const addLink = (list) => list.map(m => (
-      (pendingNewBacklinks || []).includes(m.id)
-        ? { ...m, backlinks: Array.from(new Set([...(Array.isArray(m.backlinks) ? m.backlinks : []), newId])), updatedAt: nowIso }
+      linkedMemoIds.includes(m.id)
+        ? { ...m, backlinks: Array.from(new Set([...(Array.isArray(m.backlinks) ? m.backlinks : []), newId])), updatedAt: nowIso, lastModified: nowIso }
         : m
     ));
     const updatedMemos = [newMemoObj, ...addLink(memos)];
@@ -508,11 +510,20 @@ const Index = () => {
     setPendingNewAudioClips([]);
 
     // 🔧 重要：立即触发同步，确保新memo尽快上传到D1
-    if (isAuthenticated && _scheduleCloudSync) {
-      try {
-        _scheduleCloudSync('memo-add');
-      } catch (error) {
-        console.warn('新增memo立即同步失败:', error);
+    if (isAuthenticated) {
+      // 1. 上传新创建的 Memo
+      D1ApiClient.upsertMemo(newMemoObj).catch(e => console.error('Atomic create failed:', e));
+      
+      // 2. 上传被更新双链的 Memo
+      if (linkedMemoIds.length > 0) {
+        linkedMemoIds.forEach(id => {
+          const m = [...updatedMemos, ...updatedPinned].find(x => x.id === id);
+          if (m) D1ApiClient.upsertMemo(m).catch(e => console.error('Atomic update linked memo failed:', e));
+        });
+      }
+      
+      if (_scheduleCloudSync) {
+        try { _scheduleCloudSync('memo-add'); } catch {}
       }
     }
 
@@ -641,11 +652,12 @@ const Index = () => {
         }
 
         // 🔧 触发立即同步以保存公开状态变更
-        if (isAuthenticated && _scheduleCloudSync) {
-          try {
-            _scheduleCloudSync('public-status-change');
-          } catch (error) {
-            console.warn('立即同步失败:', error);
+        if (isAuthenticated) {
+          if (targetMemo) {
+            D1ApiClient.upsertMemo(targetMemo).catch(e => console.error('Atomic update public status failed:', e));
+          }
+          if (_scheduleCloudSync) {
+            try { _scheduleCloudSync('public-status-change'); } catch {}
           }
         }
 
@@ -671,8 +683,11 @@ const Index = () => {
           setMemos(nextMemos);
           localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
           localStorage.setItem('memos', JSON.stringify(nextMemos));
-          if (isAuthenticated && _scheduleCloudSync) {
-            try { _scheduleCloudSync('memo-pin'); } catch {}
+          if (isAuthenticated) {
+            D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error('Atomic pin failed:', e));
+            if (_scheduleCloudSync) {
+              try { _scheduleCloudSync('memo-pin'); } catch {}
+            }
           }
         }
         break;
@@ -687,8 +702,12 @@ const Index = () => {
           setPinnedMemos(nextPinned);
           localStorage.setItem('memos', JSON.stringify(nextMemos));
           localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-          if (isAuthenticated && _scheduleCloudSync) {
-            try { _scheduleCloudSync('memo-unpin'); } catch {}
+          if (isAuthenticated) {
+            D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error('Atomic unpin failed:', e));
+            D1ApiClient.upsertMemo(unpinnedMemo).catch(e => console.error('Atomic update memo after unpin failed:', e));
+            if (_scheduleCloudSync) {
+              try { _scheduleCloudSync('memo-unpin'); } catch {}
+            }
           }
         }
         break;
@@ -722,8 +741,11 @@ const Index = () => {
         localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
         // 记录删除墓碑用于云端删除
         addDeletedMemoTombstone(memoId);
-        if (isAuthenticated && _scheduleCloudSync) {
-          try { _scheduleCloudSync('memo-delete'); } catch {}
+        if (isAuthenticated) {
+          D1ApiClient.deleteMemo(memoId).catch(e => console.error('Atomic delete failed:', e));
+          if (_scheduleCloudSync) {
+            try { _scheduleCloudSync('memo-delete'); } catch {}
+          }
         }
         break;
       default:
@@ -767,8 +789,14 @@ const Index = () => {
     localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
     
     // 触发云同步
-    if (isAuthenticated && _scheduleCloudSync) {
-      try { _scheduleCloudSync('memo-edit'); } catch {}
+    if (isAuthenticated) {
+      const editedMemo = [...updatedMemos, ...updatedPinned].find(m => m.id === memoId);
+      if (editedMemo) {
+        D1ApiClient.upsertMemo(editedMemo).catch(e => console.error('Atomic update edit failed:', e));
+      }
+      if (_scheduleCloudSync) {
+        try { _scheduleCloudSync('memo-edit'); } catch {}
+      }
     }
 
     setEditingId(null);
@@ -1285,6 +1313,8 @@ const Index = () => {
 
   // 画布模式相关函数
   const handleCanvasAddMemo = (memo) => {
+    let nextPinned = pinnedMemos;
+    let nextMemos = memos;
     // 检查是否为空内容，如果是则添加到pinnedMemos以便编辑
     if (!memo.content.trim()) {
       const pinnedMemo = {
@@ -1292,13 +1322,19 @@ const Index = () => {
         isPinned: true,
         pinnedAt: new Date().toISOString()
       };
-      const nextPinned = [pinnedMemo, ...pinnedMemos];
+      nextPinned = [pinnedMemo, ...pinnedMemos];
       setPinnedMemos(nextPinned);
       localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
+      if (isAuthenticated) {
+        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
+      }
     } else {
-      const nextMemos = [memo, ...memos];
+      nextMemos = [memo, ...memos];
       setMemos(nextMemos);
       localStorage.setItem('memos', JSON.stringify(nextMemos));
+      if (isAuthenticated) {
+        D1ApiClient.upsertMemo(memo).catch(e => console.error(e));
+      }
     }
     if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-add'); } catch {} }
   };
@@ -1318,7 +1354,18 @@ const Index = () => {
     setPinnedMemos(updatedPinned);
     localStorage.setItem('memos', JSON.stringify(updatedMemos));
     localStorage.setItem('pinnedMemos', JSON.stringify(updatedPinned));
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-update'); } catch {} }
+    
+    if (isAuthenticated) {
+      const editedMemo = [...updatedMemos, ...updatedPinned].find(m => m.id === id);
+      if (editedMemo) {
+        if (editedMemo.isPinned) {
+          D1ApiClient.upsertUserSettings({ pinnedMemos: updatedPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
+        } else {
+          D1ApiClient.upsertMemo(editedMemo).catch(e => console.error(e));
+        }
+      }
+      if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-update'); } catch {} }
+    }
   };
 
   const handleCanvasDeleteMemo = (id) => {
@@ -1329,7 +1376,10 @@ const Index = () => {
     localStorage.setItem('memos', JSON.stringify(nextMemos));
     localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
     addDeletedMemoTombstone(id);
-    if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-delete'); } catch {} }
+    if (isAuthenticated) {
+      D1ApiClient.deleteMemo(id).catch(e => console.error(e));
+      if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-delete'); } catch {} }
+    }
   };
 
   const handleCanvasTogglePin = (id) => {
@@ -1342,7 +1392,8 @@ const Index = () => {
         ...memoInMemos,
         isPinned: true,
         pinnedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
       };
       const nextPinned = [pinnedMemo, ...pinnedMemos];
       const nextMemos = memos.filter(memo => memo.id !== id);
@@ -1350,10 +1401,13 @@ const Index = () => {
       setMemos(nextMemos);
       localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
       localStorage.setItem('memos', JSON.stringify(nextMemos));
-      if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-pin'); } catch {} }
+      if (isAuthenticated) {
+        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
+        if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-pin'); } catch {} }
+      }
     } else if (memoInPinned) {
       // 从pinnedMemos移动到普通memos
-      const unpinnedMemo = { ...memoInPinned, isPinned: false, updatedAt: new Date().toISOString() };
+      const unpinnedMemo = { ...memoInPinned, isPinned: false, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() };
       delete unpinnedMemo.pinnedAt;
       const nextMemos = [unpinnedMemo, ...memos];
       const nextPinned = pinnedMemos.filter(memo => memo.id !== id);
@@ -1361,7 +1415,11 @@ const Index = () => {
       setPinnedMemos(nextPinned);
       localStorage.setItem('memos', JSON.stringify(nextMemos));
       localStorage.setItem('pinnedMemos', JSON.stringify(nextPinned));
-      if (isAuthenticated && _scheduleCloudSync) { try { _scheduleCloudSync('canvas-unpin'); } catch {} }
+      if (isAuthenticated) {
+        D1ApiClient.upsertUserSettings({ pinnedMemos: nextPinned, updated_at: new Date().toISOString() }).catch(e => console.error(e));
+        D1ApiClient.upsertMemo(unpinnedMemo).catch(e => console.error(e));
+        if (_scheduleCloudSync) { try { _scheduleCloudSync('canvas-unpin'); } catch {} }
+      }
     }
   };
 
