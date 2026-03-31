@@ -221,12 +221,13 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
         try {
           // 清除可能存在的旧节点，避免冲突
           const oldNode = document.getElementById(idRef.current);
-          if (oldNode) oldNode.remove();
+          if (oldNode && oldNode.parentNode) {
+            oldNode.parentNode.removeChild(oldNode);
+          }
           
           // 创建一个临时的包裹元素来进行渲染
           // ⚠️ 关键修复：Mermaid 在渲染连线和标签时，需要计算 SVG 元素的 BoundingBox (getBBox)
-          // 如果给容器设置 display: 'none'，所有的 getBBox() 都会返回 0 或者报错，导致连线乱飞或者崩溃。
-          // 解决方案：将其移出屏幕可视区域，但保持其渲染能力（visibility: hidden 或 position: absolute + left: -9999px）
+          // 解决方案：将其移出屏幕可视区域，但保持其渲染能力，并在DOM树的更安全的位置挂载
           const tempContainer = document.createElement('div');
           tempContainer.id = idRef.current;
           tempContainer.style.position = 'absolute';
@@ -237,12 +238,20 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           tempContainer.style.width = '1000px'; 
           
           // 必须添加到 document.body 才能正确计算尺寸
-          document.body.appendChild(tempContainer);
+          const targetParent = document.body || document.documentElement;
+          if (targetParent) {
+            targetParent.appendChild(tempContainer);
+          } else {
+            throw new Error("No DOM element available to append Mermaid container");
+          }
           
-          const { svg: svgCode } = await window.mermaid.render(idRef.current, text, tempContainer);
+          // 尝试渲染
+          // mermaid.render 在新版本中的签名是: render(id, text, container?)
+          // 但有时容器可能还没有准备好，我们可以只传 id 和 text
+          const { svg: svgCode } = await window.mermaid.render(idRef.current, text);
           
           // 渲染完成后移除临时节点
-          if (tempContainer.parentNode) {
+          if (tempContainer && tempContainer.parentNode) {
             tempContainer.parentNode.removeChild(tempContainer);
           }
           
@@ -255,7 +264,11 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           if (failedNode && failedNode.parentNode) {
             failedNode.parentNode.removeChild(failedNode);
           }
-          setError(true);
+          // 不标记为完全失败，可能只是mermaid内部计算偶发错误，我们可以在下次重试
+          // 只有当真正的语法错误时才抛出错误状态
+          if (e.message && (e.message.includes('Parse error') || e.message.includes('Syntax error'))) {
+            setError(true);
+          }
         }
       }
     };
@@ -274,11 +287,24 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     }, [text]);
 
     if (error) {
-      return <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded text-sm border border-red-200 dark:border-red-800">Failed to render Mermaid diagram. Please check syntax.</div>;
+      return (
+        <div className="my-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800">
+          <div className="font-bold mb-2">Failed to render Mermaid diagram. Please check your syntax:</div>
+          <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs">{text}</pre>
+        </div>
+      );
     }
 
     if (!svg) {
-      return <div className="p-4 text-center text-gray-500 text-sm animate-pulse">Loading diagram...</div>;
+      return (
+        <div className="my-4 p-8 text-center text-gray-400 dark:text-gray-500 text-sm bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-800 animate-pulse flex flex-col items-center justify-center gap-3">
+          <svg className="w-6 h-6 animate-spin text-gray-300 dark:text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Rendering diagram...
+        </div>
+      );
     }
 
     return (
