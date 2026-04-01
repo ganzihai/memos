@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -30,7 +31,6 @@ const LoginDialog = () => {
     try {
       const result = await login(password.trim());
       if (result.success) {
-        // 登录成功，关闭对话框
         hideLogin();
         setPassword('');
       } else {
@@ -70,6 +70,9 @@ const LoginDialog = () => {
           <DialogTitle className="text-center text-xl font-bold">
             登录以访问全部功能
           </DialogTitle>
+          <DialogDescription className="text-center text-sm text-gray-500 dark:text-gray-400">
+            当前处于公开博客模式，登录后可使用全部功能
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -131,12 +134,6 @@ const LoginDialog = () => {
             )}
           </Button>
         </form>
-
-        <div className="text-center mt-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            当前处于公开博客模式，登录后可使用全部功能
-          </p>
-        </div>
       </DialogContent>
     </Dialog>
   );

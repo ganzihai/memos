@@ -20,14 +20,16 @@ export function ThemeProvider({ children }) {
     return () => window.removeEventListener('app:themeColorChanged', handleThemeColorChange);
   }, []);
 
-  // 预加载字体资源
+  // 预加载字体资源（只预加载有效 URL 的字体）
   useEffect(() => {
     const fontUrls = {
+      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
+      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
       kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
     };
 
-    // 创建字体预加载函数
     const preloadFont = (url) => {
+      if (!url) return Promise.resolve();
       return new Promise((resolve) => {
         const link = document.createElement('link');
         link.rel = 'preload';
@@ -35,11 +37,11 @@ export function ThemeProvider({ children }) {
         link.as = 'font';
         link.crossOrigin = 'anonymous';
         link.onload = resolve;
+        link.onerror = resolve;
         document.head.appendChild(link);
       });
     };
 
-    // 预加载所有字体
     Promise.all([
       preloadFont(fontUrls.jinghua),
       preloadFont(fontUrls.lxgw),
@@ -264,4 +266,3 @@ export function ThemeProvider({ children }) {
 export function useTheme() {
   return useContext(ThemeContext);
 }
-
