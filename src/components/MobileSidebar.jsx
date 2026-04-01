@@ -52,7 +52,7 @@ const MobileSidebar = ({
                   className="h-5 w-5 mr-2 transition-colors duration-300"
                   style={{ color: themeColor }}
                 />
-                <h3 className="text-lg font-semibold dark:text-gray-200">记忆热力图</h3>
+                <h3 className="text-lg font-semibold dark:text-gray-200">日志时间</h3>
               </div>
               <div className="overflow-hidden">
                 <GitHubStyleHeatmap data={heatmapData} onDateClick={onDateClick} />
