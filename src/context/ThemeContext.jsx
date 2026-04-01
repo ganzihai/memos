@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
@@ -20,14 +19,8 @@ export function ThemeProvider({ children }) {
     return () => window.removeEventListener('app:themeColorChanged', handleThemeColorChange);
   }, []);
 
-  // 预加载字体资源（只预加载有效 URL 的字体）
+  // 预加载字体资源（仅预加载实际使用的 kongshan 字体）
   useEffect(() => {
-    const fontUrls = {
-      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
-      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
-      kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
-    };
-
     const preloadFont = (url) => {
       if (!url) return Promise.resolve();
       return new Promise((resolve) => {
@@ -42,15 +35,9 @@ export function ThemeProvider({ children }) {
       });
     };
 
-    Promise.all([
-      preloadFont(fontUrls.jinghua),
-      preloadFont(fontUrls.lxgw),
-      preloadFont(fontUrls.kongshan)
-    ]).then(() => {
-      console.log('所有字体已预加载');
-    }).catch((error) => {
-      console.error('字体预加载失败:', error);
-    });
+    preloadFont('https://memosr2.ganzi.fun/2026-03/kongshan.ttf')
+      .then(() => console.log('空山字体已预加载'))
+      .catch((error) => console.error('字体预加载失败:', error));
   }, []);
 
   useEffect(() => {
@@ -184,11 +171,9 @@ export function ThemeProvider({ children }) {
     return () => clearInterval(interval);
   }, [currentFont, currentFontSize]);
 
-  // 应用字体设置
+  // 应用字体设置（仅支持 kongshan 字体）
   useEffect(() => {
     const fontUrls = {
-      jinghua: 'https://memosr2.ganzi.fun/2026-03/jhls.ttf',
-      lxgw: 'https://memosr2.ganzi.fun/2026-03/xgwk.ttf',
       kongshan: 'https://memosr2.ganzi.fun/2026-03/kongshan.ttf'
     };
 
