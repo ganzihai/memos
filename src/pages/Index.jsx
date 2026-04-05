@@ -1,16 +1,5 @@
 /**
- * Index.jsx — 彻底重构版
- *
- * 核心变化：
- *   - 废弃 memos + pinnedMemos 双列表
- *   - 只维护单一 `memos` 数组，is_pinned 字段区分置顶
- *   - 所有写操作：先更新 React state → 同步写 localStorage → 立即调 D1ApiClient
- *   - 恢复由 SettingsContext 完成，Index 监听 app:dataChanged 事件刷新
- *
- * FIX (2026-04-05): 统一 memo id 为字符串类型
- *   - normalizeMemo 中 id: String(m.id)
- *   - addMemo 中 id = String(Date.now())
- *   - 所有 m.id === memoId 改为 sameId(m.id, memoId)，彻底消除 Number vs String 严格比较失效
+ * Index.jsx — 彻底重构版 (修复数据重复、类型不一致与异步竞态问题)
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import LeftSidebar from '@/components/LeftSidebar';
@@ -36,12 +25,12 @@ import { D1ApiClient } from '@/lib/d1-api';
 import { toast } from 'sonner';
 
 // ── 工具 ───────────────────────────────────────────────────────────────────────
-// FIX: id 统一为字符串，彻底消除 Number === String 严格比较失效
 const normalizeMemo = (m) => ({
-  id:           String(m.id),
+  // 【修复点 1】: 强制所有的 ID 无论从何处来，都变为标准的 String，防止严格比较失败
+  id:           String(m.id || m.memo_id || m.memoId),
   content:      m.content      || '',
   tags:         Array.isArray(m.tags)       ? m.tags       : [],
-  backlinks:    Array.isArray(m.backlinks)  ? m.backlinks  : [],
+  backlinks:    Array.isArray(m.backlinks)  ? m.backlinks.map(String) : [],
   audioClips:   Array.isArray(m.audioClips) ? m.audioClips : [],
   is_public:    typeof m.is_public  === 'boolean' ? m.is_public  : m.is_public  === 1,
   is_pinned:    typeof m.is_pinned  === 'boolean' ? m.is_pinned  : (m.is_pinned === 1 || m.isPinned === true),
@@ -54,9 +43,6 @@ const normalizeMemo = (m) => ({
   canvasY:      typeof m.canvasY === 'number' ? m.canvasY : undefined,
 });
 
-// FIX: 宽松相等辅助——无论传入 Number 还是 String，都能正确匹配
-const sameId = (a, b) => String(a) === String(b);
-
 // 派生属性：置顶 memo 列表
 const getPinned  = (memos) => memos.filter(m => m.is_pinned);
 const getNormal  = (memos) => memos.filter(m => !m.is_pinned);
@@ -66,12 +52,6 @@ const Index = () => {
   // ─ 单一数据源 ────────────────────────────────────────────────────────────────
   const [memos, setMemosState] = useState([]);
   const memosRef = useRef([]);
-
-  // FIX: in-flight Set，防止同一条 memo 在上传途中被重复触发 upsert
-  const uploadingIdsRef = useRef(new Set());
-
-  // FIX: 编辑 debounce timer
-  const editDebounceRef = useRef(null);
 
   // 所有写操作都通过此函数，确保 ref、state、localStorage 三者同步
   const setMemos = useCallback((updater) => {
@@ -84,9 +64,9 @@ const Index = () => {
     });
   }, []);
 
-  // 便捷：更新单条 memo（FIX: 用 sameId 比较）
+  // 便捷：更新单条 memo
   const updateMemo = useCallback((id, patch) => {
-    setMemos(prev => prev.map(m => sameId(m.id, id) ? { ...m, ...patch, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() } : m));
+    setMemos(prev => prev.map(m => String(m.id) === String(id) ? { ...m, ...patch, updatedAt: new Date().toISOString(), lastModified: new Date().toISOString() } : m));
   }, [setMemos]);
 
   // ─ UI State ──────────────────────────────────────────────────────────────────
@@ -163,20 +143,21 @@ const Index = () => {
     const handler = (e) => {
       const part = e?.detail?.part || '';
       if (!part.includes('sync.') && !part.includes('restore.') && part !== 'startup') return;
-      // FIX: sync.downmerge 是由本页自己的 addMemo 触发的 scheduleSync 引起的回写，
-      // 若当前 uploadingIdsRef 非空（正在上传中），跳过此次 state 替换，避免重复卡片
-      if (part === 'sync.downmerge' && uploadingIdsRef.current.size > 0) return;
       const fresh = mergeLegacyStore().map(normalizeMemo);
-      // 只在内容真正变化时更新，避免死循环
       if (JSON.stringify(fresh.map(m => m.id + m.updatedAt + m.is_pinned)) !==
           JSON.stringify(memosRef.current.map(m => m.id + m.updatedAt + m.is_pinned))) {
         memosRef.current = fresh;
         setMemosState(fresh);
       }
     };
+    const storageHandler = (e) => {
+      if (e?.key === 'memos') handler({ detail: { part: 'sync.storage' } });
+    };
     window.addEventListener('app:dataChanged', handler);
+    window.addEventListener('storage', storageHandler);
     return () => {
       window.removeEventListener('app:dataChanged', handler);
+      window.removeEventListener('storage', storageHandler);
     };
   }, []);
 
@@ -295,15 +276,10 @@ const Index = () => {
     }
   }, [memos, activeTag, activeDate, searchQuery, isAuthenticated]);
 
-  // ─ D1 上传辅助（带 in-flight 去重） ─────────────────────────────────────────
+  // ─ D1 立即上传辅助 ───────────────────────────────────────────────────────────
   const uploadMemo = useCallback((memo) => {
-    if (!isAuthenticated || !memo) return;
-    const key = String(memo.id);
-    if (uploadingIdsRef.current.has(key)) return;
-    uploadingIdsRef.current.add(key);
-    D1ApiClient.upsertMemo(memo)
-      .catch(e => console.error('upsertMemo failed:', e))
-      .finally(() => uploadingIdsRef.current.delete(key));
+    if (!isAuthenticated) return;
+    D1ApiClient.upsertMemo(memo).catch(e => console.error('upsertMemo failed:', e));
   }, [isAuthenticated]);
 
   const uploadMemos = useCallback((list) => {
@@ -317,48 +293,61 @@ const Index = () => {
     const tags = [...newMemo.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
       .map(m => m[1]).filter((t, i, s) => s.indexOf(t) === i && t.length > 0);
     const now  = new Date().toISOString();
-    // FIX: id 生成时即为字符串，避免后续与 D1 返回的字符串 id 类型不一致
-    const id   = String(Date.now());
+    const id   = String(Date.now()); // 【修复点 2】: 强转为 String，避免本地数据与远端不一致
     const obj  = normalizeMemo({
       id, content: newMemo, tags,
       createdAt: now, updatedAt: now, timestamp: now, lastModified: now,
       backlinks: pendingNewBacklinks || [], audioClips: pendingNewAudioClips || [],
       is_public: false, is_pinned: false,
     });
-    const linkedIds = [...(pendingNewBacklinks || [])];
+    
+    const linkedIds = [...(pendingNewBacklinks || [])].map(String);
+    
     setMemos(prev => {
       const withLinks = prev.map(m =>
-        linkedIds.some(lid => sameId(m.id, lid))
+        linkedIds.includes(String(m.id))
           ? { ...m, backlinks: [...new Set([...(m.backlinks || []), id])], updatedAt: now }
           : m
       );
-      const next = [obj, ...withLinks];
-      Promise.resolve().then(() => {
-        uploadMemo(obj);
-        linkedIds.forEach(lid => { const m = next.find(x => sameId(x.id, lid)); if (m) uploadMemo(m); });
-        _scheduleCloudSync?.('memo-add');
-      });
-      return next;
+      return [obj, ...withLinks];
     });
+    
     setNewMemo('');
     setPendingNewBacklinks([]);
     setPendingNewAudioClips([]);
-  }, [newMemo, pendingNewBacklinks, pendingNewAudioClips, setMemos, uploadMemo, _scheduleCloudSync]);
+
+    // 【修复点 3】: 将同步操作转为 async 异步，彻底避免老数据覆盖新数据的竞态问题
+    (async () => {
+      try {
+        await D1ApiClient.upsertMemo(obj);
+        if (linkedIds.length > 0) {
+          await Promise.all(linkedIds.map(lid => {
+             const m = memosRef.current.find(x => String(x.id) === String(lid));
+             return m ? D1ApiClient.upsertMemo(m) : Promise.resolve();
+          }));
+        }
+        // 确保写完后再拉取
+        _scheduleCloudSync?.('memo-add');
+      } catch (err) {
+        console.error("同步到D1失败:", err);
+      }
+    })();
+  }, [newMemo, pendingNewBacklinks, pendingNewAudioClips, setMemos, _scheduleCloudSync]);
 
   // ─ 菜单操作 ──────────────────────────────────────────────────────────────────
   const handleMenuAction = useCallback((e, memoId, action) => {
     e.stopPropagation();
-    // FIX: 将传入 memoId 统一为字符串，防止外部传入数字导致 sameId 之外的比较失效
-    const mid = String(memoId);
     const now = new Date().toISOString();
+    const targetId = String(memoId);
 
     if (action === 'toggle-public') {
       setMemos(prev => {
-        const next = prev.map(m => sameId(m.id, mid) ? { ...m, is_public: !m.is_public, updatedAt: now } : m);
-        const target = next.find(m => sameId(m.id, mid));
+        const next = prev.map(m => String(m.id) === targetId ? { ...m, is_public: !m.is_public, updatedAt: now } : m);
+        const target = next.find(m => String(m.id) === targetId);
         toast.success(target?.is_public ? '已设为公开' : '已设为私有');
         if (target) {
-          uploadMemo(target);
+          D1ApiClient.updateMemoMeta(targetId, { is_public: target.is_public })
+            .catch(() => uploadMemo(target));
           _scheduleCloudSync?.('public-toggle');
         }
         return next;
@@ -366,41 +355,41 @@ const Index = () => {
 
     } else if (action === 'pin') {
       setMemos(prev => {
-        const target = prev.find(m => sameId(m.id, mid));
+        const target = prev.find(m => String(m.id) === targetId);
         if (!target || target.is_pinned) return prev;
-        const updated = { ...target, is_pinned: true, pinnedAt: now, updatedAt: now };
-        const next = prev.map(m => sameId(m.id, mid) ? updated : m);
-        uploadMemo(updated);
+        const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: true, pinnedAt: now, updatedAt: now } : m);
+        const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
+        D1ApiClient.updateMemoMeta(targetId, { is_pinned: true, pinned_at: now }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
+        D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
         _scheduleCloudSync?.('memo-pin');
         return next;
       });
 
     } else if (action === 'unpin') {
       setMemos(prev => {
-        const target = prev.find(m => sameId(m.id, mid));
-        if (!target) return prev;
-        const updated = { ...target, is_pinned: false, pinnedAt: null, updatedAt: now };
-        const next = prev.map(m => sameId(m.id, mid) ? updated : m);
-        uploadMemo(updated);
+        const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: false, pinnedAt: null, updatedAt: now } : m);
+        const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
+        D1ApiClient.updateMemoMeta(targetId, { is_pinned: false, pinned_at: null }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
+        D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
         _scheduleCloudSync?.('memo-unpin');
         return next;
       });
 
     } else if (action === 'edit') {
-      const m = memos.find(m => sameId(m.id, mid));
-      if (m) { setEditingId(m.id); setEditContent(m.content); }
+      const m = memos.find(m => String(m.id) === targetId);
+      if (m) { setEditingId(targetId); setEditContent(m.content); }
 
     } else if (action === 'share') {
-      const m = memos.find(m => sameId(m.id, mid));
+      const m = memos.find(m => String(m.id) === targetId);
       if (m) { setSelectedMemo(m); setIsShareDialogOpen(true); }
 
     } else if (action === 'delete') {
       setMemos(prev => {
         const next = prev
-          .filter(m => !sameId(m.id, mid))
-          .map(m => ({ ...m, backlinks: (m.backlinks || []).filter(bid => !sameId(bid, mid)) }));
-        addDeletedMemoTombstone(mid);
-        D1ApiClient.deleteMemo(mid).catch(console.error);
+          .filter(m => String(m.id) !== targetId)
+          .map(m => ({ ...m, backlinks: (m.backlinks || []).filter(id => String(id) !== targetId) }));
+        addDeletedMemoTombstone(targetId);
+        D1ApiClient.deleteMemo(targetId).catch(console.error);
         _scheduleCloudSync?.('memo-delete');
         return next;
       });
@@ -408,21 +397,18 @@ const Index = () => {
     setActiveMenuId(null);
   }, [memos, setMemos, uploadMemo, _scheduleCloudSync]);
 
-  // ─ 保存编辑（带 300ms debounce） ──────────────────────────────────────────
+  // ─ 保存编辑 ──────────────────────────────────────────────────────────────────
   const saveEdit = useCallback((memoId) => {
-    const mid = String(memoId);
+    const targetId = String(memoId);
     const tags = [...editContent.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
       .map(m => m[1]).filter((t, i, s) => s.indexOf(t) === i && t.length > 0);
     const now = new Date().toISOString();
     setMemos(prev => {
-      const next = prev.map(m => sameId(m.id, mid) ? { ...m, content: editContent, tags, updatedAt: now, lastModified: now } : m);
-      const edited = next.find(m => sameId(m.id, mid));
+      const next = prev.map(m => String(m.id) === targetId ? { ...m, content: editContent, tags, updatedAt: now, lastModified: now } : m);
+      const edited = next.find(m => String(m.id) === targetId);
       if (edited) {
-        clearTimeout(editDebounceRef.current);
-        editDebounceRef.current = setTimeout(() => {
-          uploadMemo(edited);
-          next.filter(m => !sameId(m.id, mid) && m.backlinks?.some(bid => sameId(bid, mid))).forEach(uploadMemo);
-        }, 300);
+        uploadMemo(edited);
+        next.filter(m => String(m.id) !== targetId && m.backlinks?.includes(targetId)).forEach(uploadMemo);
       }
       _scheduleCloudSync?.('memo-edit');
       return next;
@@ -435,17 +421,18 @@ const Index = () => {
   // ─ 双链 ───────────────────────────────────────────────────────────────────────
   const handleAddBacklink = useCallback((fromId, toId) => {
     if (!toId) return;
-    if (!fromId) { setPendingNewBacklinks(p => p.includes(String(toId)) ? p : [...p, String(toId)]); return; }
-    if (sameId(fromId, toId)) return;
-    const fid = String(fromId); const tid = String(toId);
+    const fromStr = fromId ? String(fromId) : null;
+    const toStr = String(toId);
+    if (!fromStr) { setPendingNewBacklinks(p => p.includes(toStr) ? p : [...p, toStr]); return; }
+    if (fromStr === toStr) return;
     const now = new Date().toISOString();
     setMemos(prev => {
       const next = prev.map(m => {
-        if (sameId(m.id, fid)) return { ...m, backlinks: [...new Set([...(m.backlinks||[]), tid])],   updatedAt: now };
-        if (sameId(m.id, tid)) return { ...m, backlinks: [...new Set([...(m.backlinks||[]), fid])], updatedAt: now };
+        if (String(m.id) === fromStr) return { ...m, backlinks: [...new Set([...(m.backlinks||[]), toStr])],   updatedAt: now };
+        if (String(m.id) === toStr)   return { ...m, backlinks: [...new Set([...(m.backlinks||[]), fromStr])], updatedAt: now };
         return m;
       });
-      uploadMemos(next.filter(m => sameId(m.id, fid) || sameId(m.id, tid)));
+      uploadMemos(next.filter(m => String(m.id) === fromStr || String(m.id) === toStr));
       _scheduleCloudSync?.('memo-backlink');
       return next;
     });
@@ -453,14 +440,15 @@ const Index = () => {
 
   const handleRemoveBacklink = useCallback((fromId, toId) => {
     if (!toId) return;
-    if (!fromId) { setPendingNewBacklinks(p => p.filter(id => !sameId(id, toId))); return; }
-    if (sameId(fromId, toId)) return;
-    const fid = String(fromId); const tid = String(toId);
+    const fromStr = fromId ? String(fromId) : null;
+    const toStr = String(toId);
+    if (!fromStr) { setPendingNewBacklinks(p => p.filter(id => String(id) !== toStr)); return; }
+    if (fromStr === toStr) return;
     const now = new Date().toISOString();
     setMemos(prev => {
       const next = prev.map(m => {
-        if (sameId(m.id, fid)) return { ...m, backlinks: (m.backlinks||[]).filter(bid => !sameId(bid, tid)),   updatedAt: now };
-        if (sameId(m.id, tid)) return { ...m, backlinks: (m.backlinks||[]).filter(bid => !sameId(bid, fid)), updatedAt: now };
+        if (String(m.id) === fromStr) return { ...m, backlinks: (m.backlinks||[]).filter(id => String(id) !== toStr),   updatedAt: now };
+        if (String(m.id) === toStr)   return { ...m, backlinks: (m.backlinks||[]).filter(id => String(id) !== fromStr), updatedAt: now };
         return m;
       });
       _scheduleCloudSync?.('memo-backlink-remove');
@@ -471,12 +459,12 @@ const Index = () => {
   // ─ 录音 ───────────────────────────────────────────────────────────────────────
   const handleAddAudioClip = useCallback((fromId, clip) => {
     if (!clip) return;
-    if (!fromId) { setPendingNewAudioClips(p => [...p, clip]); return; }
-    const fid = String(fromId);
+    const fromStr = fromId ? String(fromId) : null;
+    if (!fromStr) { setPendingNewAudioClips(p => [...p, clip]); return; }
     const now = new Date().toISOString();
     setMemos(prev => {
-      const next = prev.map(m => !sameId(m.id, fid) ? m : { ...m, audioClips: [...(m.audioClips||[]), clip], updatedAt: now });
-      uploadMemo(next.find(m => sameId(m.id, fid)));
+      const next = prev.map(m => String(m.id) !== fromStr ? m : { ...m, audioClips: [...(m.audioClips||[]), clip], updatedAt: now });
+      uploadMemo(next.find(m => String(m.id) === fromStr));
       _scheduleCloudSync?.('memo-audio-add');
       return next;
     });
@@ -484,19 +472,19 @@ const Index = () => {
 
   const handleRemoveAudioClip = useCallback((fromId, idx) => {
     if (typeof idx !== 'number') return;
-    if (!fromId) { setPendingNewAudioClips(p => p.filter((_, i) => i !== idx)); return; }
-    const fid = String(fromId);
+    const fromStr = fromId ? String(fromId) : null;
+    if (!fromStr) { setPendingNewAudioClips(p => p.filter((_, i) => i !== idx)); return; }
     const now = new Date().toISOString();
     setMemos(prev => {
-      const next = prev.map(m => !sameId(m.id, fid) ? m : { ...m, audioClips: (m.audioClips||[]).filter((_, i) => i !== idx), updatedAt: now });
-      uploadMemo(next.find(m => sameId(m.id, fid)));
+      const next = prev.map(m => String(m.id) !== fromStr ? m : { ...m, audioClips: (m.audioClips||[]).filter((_, i) => i !== idx), updatedAt: now });
+      uploadMemo(next.find(m => String(m.id) === fromStr));
       _scheduleCloudSync?.('memo-audio-remove');
       return next;
     });
   }, [setMemos, uploadMemo, _scheduleCloudSync]);
 
   // ─ 预览 / 菜单控制 ───────────────────────────────────────────────────────────
-  const handlePreviewMemo = (id) => setPreviewMemoId(id);
+  const handlePreviewMemo = (id) => setPreviewMemoId(String(id));
   const handleMenuContainerEnter = (id) => {
     clearTimeout(hoverTimerRef.current);
     if (activeMenuId !== id) hoverTimerRef.current = setTimeout(() => setActiveMenuId(id), 300);
@@ -534,35 +522,31 @@ const Index = () => {
   }, [setMemos, uploadMemo, _scheduleCloudSync]);
 
   const handleCanvasUpdateMemo = useCallback((id, updates) => {
-    const cid = String(id);
+    const targetId = String(id);
     setMemos(prev => {
-      const next = prev.map(m => sameId(m.id, cid) ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m);
-      uploadMemo(next.find(m => sameId(m.id, cid)));
+      const next = prev.map(m => String(m.id) === targetId ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m);
+      uploadMemo(next.find(m => String(m.id) === targetId));
       _scheduleCloudSync?.('canvas-update');
       return next;
     });
   }, [setMemos, uploadMemo, _scheduleCloudSync]);
 
   const handleCanvasDeleteMemo = useCallback((id) => {
-    const cid = String(id);
-    setMemos(prev => {
-      addDeletedMemoTombstone(cid);
-      D1ApiClient.deleteMemo(cid).catch(console.error);
-      _scheduleCloudSync?.('canvas-delete');
-      return prev.filter(m => !sameId(m.id, cid));
-    });
+    const targetId = String(id);
+    setMemos(prev => { addDeletedMemoTombstone(targetId); D1ApiClient.deleteMemo(targetId).catch(console.error); _scheduleCloudSync?.('canvas-delete'); return prev.filter(m => String(m.id) !== targetId); });
   }, [setMemos, _scheduleCloudSync]);
 
   const handleCanvasTogglePin = useCallback((id) => {
-    const cid = String(id);
     const now = new Date().toISOString();
+    const targetId = String(id);
     setMemos(prev => {
-      const target = prev.find(m => sameId(m.id, cid));
+      const target = prev.find(m => String(m.id) === targetId);
       if (!target) return prev;
       const isPin = !target.is_pinned;
-      const updated = { ...target, is_pinned: isPin, pinnedAt: isPin ? now : null, updatedAt: now };
-      const next  = prev.map(m => sameId(m.id, cid) ? updated : m);
-      uploadMemo(updated);
+      const next  = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: isPin, pinnedAt: isPin ? now : null, updatedAt: now } : m);
+      const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
+      D1ApiClient.updateMemoMeta(targetId, { is_pinned: isPin, pinned_at: isPin ? now : null }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
+      D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
       _scheduleCloudSync?.(isPin ? 'canvas-pin' : 'canvas-unpin');
       return next;
     });
@@ -658,7 +642,6 @@ const Index = () => {
     toast.success('已收藏并设置为背景');
   };
 
-  // ─ 派生 pinnedMemos ───────────────────────────────────────────────────────────
   const filteredPinnedMemos = getPinned(filteredMemos);
   const allPinnedMemos = getPinned(memos);
   const allNormalMemos = getNormal(memos);
@@ -749,125 +732,44 @@ const Index = () => {
           isRightSidebarHovered={isRightSidebarHovered}
           isAppLoaded={isAppLoaded} isInitialLoad={isInitialLoad}
           isCanvasMode={isCanvasMode}
-          clearFilters={clearFilters}
         />
-
-        {isMobileSidebarOpen && (
-          <MobileSidebar
-            memos={memos} heatmapData={heatmapData}
-            isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)}
-            activeTag={activeTag}
-            setActiveTag={(tag) => { setActiveTag(tag); setActiveDate(null); setIsMobileSidebarOpen(false); }}
-            clearFilters={() => { clearFilters(); setIsMobileSidebarOpen(false); }}
-            onDateClick={(ds) => { handleDateClick(ds); setIsMobileSidebarOpen(false); }}
-            onSettingsOpen={() => { setIsSettingsOpen(true); setIsMobileSidebarOpen(false); }}
-            isAuthenticated={isAuthenticated}
-          />
-        )}
       </div>
 
-      {isSettingsOpen && (
-        <SettingsCard
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          memos={memos}
-          onMemosRestore={(restored) => {
-            const normalized = restored.map(normalizeMemo);
-            memosRef.current = normalized;
-            setMemosState(normalized);
-            persistMemos(normalized);
-          }}
-        />
-      )}
+      <MobileSidebar
+        isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)}
+        heatmapData={heatmapData}
+        memos={isAuthenticated ? memos : memos.filter(m => m.is_public)}
+        activeTag={activeTag}
+        setActiveTag={(tag) => { setActiveTag(tag); setActiveDate(null); }}
+        onSettingsOpen={() => setIsSettingsOpen(true)}
+        onDateClick={handleDateClick}
+        isAuthenticated={isAuthenticated}
+        onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal(m => ({ ...m, isOpen: true })); }}
+      />
 
-      {isShareDialogOpen && selectedMemo && (
-        <ShareDialog
-          isOpen={isShareDialogOpen}
-          memo={selectedMemo}
-          onClose={() => { setIsShareDialogOpen(false); setSelectedMemo(null); }}
-        />
-      )}
-
-      {isAIDialogOpen && (
-        <AIDialog
-          isOpen={isAIDialogOpen}
-          onClose={() => setIsAIDialogOpen(false)}
-          memos={memos}
-        />
-      )}
-
-      {isDailyReviewOpen && (
-        <DailyReview
-          isOpen={isDailyReviewOpen}
-          onClose={() => setIsDailyReviewOpen(false)}
-          memos={memos}
-        />
-      )}
-
-      {previewMemoId && (
-        <MemoPreviewDialog
-          isOpen={!!previewMemoId}
-          memoId={previewMemoId}
-          memos={memos}
-          onClose={() => setPreviewMemoId(null)}
-          onPreviewMemo={handlePreviewMemo}
-        />
-      )}
-
-      {isTutorialOpen && (
-        <TutorialDialog
-          isOpen={isTutorialOpen}
-          onClose={() => {
-            setIsTutorialOpen(false);
-            try { localStorage.setItem('hasSeenTutorialV1', 'true'); } catch {}
-          }}
-        />
-      )}
-
-      <AIButton
-        onContinue={handleAIContinue}
-        onOptimize={handleAIOptimize}
-        onChat={handleAIChat}
-        isEditorFocused={isEditorFocused}
+      <SettingsCard isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onOpenTutorial={() => setIsTutorialOpen(true)} />
+      <ShareDialog   isOpen={isShareDialogOpen} onClose={() => setIsShareDialogOpen(false)} memo={selectedMemo} />
+      <AIDialog      isOpen={isAIDialogOpen}    onClose={() => setIsAIDialogOpen(false)}    memos={memos} />
+      <DailyReview   isOpen={isDailyReviewOpen} onClose={() => setIsDailyReviewOpen(false)} memos={memos} />
+      <TutorialDialog isOpen={isTutorialOpen}   onClose={() => setIsTutorialOpen(false)} />
+      <MemoPreviewDialog
+        memo={memos.find(m => String(m.id) === previewMemoId) || null}
+        open={!!previewMemoId}
+        onClose={() => setPreviewMemoId(null)}
       />
 
       {musicConfig?.enabled && (
-        <MiniMusicPlayer
-          musicUrl={musicModal.musicUrl}
-          cover={musicModal.cover}
-          title={musicModal.title}
-          author={musicModal.author}
-          onExpand={() => setMusicModal(m => ({ ...m, isOpen: true }))}
-        />
+        <>
+          <MusicModal isOpen={musicModal.isOpen} onClose={() => setMusicModal(m => ({ ...m, isOpen: false }))} danmakuText={musicModal.danmakuText} enableDanmaku={musicModal.enableDanmaku} />
+          {!isCanvasMode && <MiniMusicPlayer onOpenFull={() => setMusicModal(m => ({ ...m, isOpen: true }))} />}
+          <MusicSearchCard open={musicSearchOpen} keyword={musicSearchKeyword} onClose={() => setMusicSearchOpen(false)} />
+        </>
       )}
 
-      <MusicModal
-        isOpen={musicModal.isOpen}
-        onClose={() => setMusicModal(m => ({ ...m, isOpen: false }))}
-        title={musicModal.title}
-        musicUrl={musicModal.musicUrl}
-        cover={musicModal.cover}
-        author={musicModal.author}
-        danmakuText={musicModal.danmakuText}
-        enableDanmaku={musicModal.enableDanmaku}
-      />
-
-      {musicSearchOpen && (
-        <MusicSearchCard
-          isOpen={musicSearchOpen}
-          keyword={musicSearchKeyword}
-          onClose={() => setMusicSearchOpen(false)}
-          onPlay={(song) => {
-            setMusicModal(m => ({
-              ...m,
-              isOpen: true,
-              title: song.name,
-              musicUrl: song.url,
-              cover: song.cover || m.cover,
-              author: song.artist || m.author,
-            }));
-            setMusicSearchOpen(false);
-          }}
+      {!isCanvasMode && isAuthenticated && (
+        <AIButton
+          isSettingsOpen={isSettingsOpen} isShareDialogOpen={isShareDialogOpen} isEditorFocused={isEditorFocused}
+          onContinue={handleAIContinue} onOptimize={handleAIOptimize} onChat={handleAIChat}
         />
       )}
     </div>
