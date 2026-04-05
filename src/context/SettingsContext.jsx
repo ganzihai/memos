@@ -16,7 +16,8 @@ export function useSettings() {
 // ─── 工具：把 D1 返回的原始行转换为前端 memo 对象 ───────────────────────────
 function rowToMemo(row) {
   return {
-    id:           row.memo_id,
+    // FIX: id 统一为字符串，与前端 normalizeMemo 保持一致，防止严格比较失效
+    id:           String(row.memo_id),
     content:      row.content || '',
     tags:         tryParse(row.tags,        []),
     backlinks:    tryParse(row.backlinks,   []),
@@ -43,11 +44,12 @@ export function mergeLegacyStore() {
     const pinned = tryParse(localStorage.getItem('pinnedMemos'),  []);
     const map = new Map();
     for (const m of (Array.isArray(memos) ? memos : [])) {
-      map.set(String(m.id), { ...m, is_pinned: m.is_pinned || m.isPinned || false });
+      // FIX: Map key 和存储的 id 均统一为字符串
+      map.set(String(m.id), { ...m, id: String(m.id), is_pinned: m.is_pinned || m.isPinned || false });
     }
     for (const m of (Array.isArray(pinned) ? pinned : [])) {
       const existing = map.get(String(m.id));
-      map.set(String(m.id), { ...(existing || {}), ...m, is_pinned: true });
+      map.set(String(m.id), { ...(existing || {}), ...m, id: String(m.id), is_pinned: true });
     }
     return Array.from(map.values());
   } catch {
@@ -122,18 +124,16 @@ export function SettingsProvider({ children }) {
       const deletedSet = new Set((tombstones || []).map(t => String(t.id)));
       const lastSyncAt = Number(localStorage.getItem('lastCloudSyncAt') || 0);
 
-      // ── 3. 三路合并：双向取最新（FIX: 改为 Math.max，防止本地时钟偏快时覆盖云端编辑）
+      // ── 3. 三路合并：双向取最新
       const localMap = new Map(local.map(m => [String(m.id), m]));
       const cloudMap = new Map(cloudMemos.map(m => [String(m.id), m]));
       const merged   = new Map();
 
-      // 保留所有本地未删除的 memo
       for (const [id, lm] of localMap) {
         if (deletedSet.has(id)) continue;
         merged.set(id, lm);
       }
 
-      // FIX: 双向取最新 updatedAt，不再单向偏向本地
       for (const [id, cm] of cloudMap) {
         if (deletedSet.has(id)) continue;
         const lm = merged.get(id);
@@ -142,12 +142,10 @@ export function SettingsProvider({ children }) {
         } else {
           const lTime = new Date(lm.updatedAt || lm.lastModified || 0).getTime();
           const cTime = new Date(cm.updatedAt || cm.lastModified || 0).getTime();
-          // 取 updatedAt 更晚的版本；相等时优先云端（更权威）
           merged.set(id, cTime >= lTime ? { ...lm, ...cm } : lm);
         }
       }
 
-      // 移除远端已删除（且本地同步时间之前的）memo
       for (const [id, lm] of localMap) {
         if (!cloudMap.has(id) && !deletedSet.has(id) && lastSyncAt > 0) {
           const lTime = new Date(lm.updatedAt || lm.createdAt || 0).getTime();
@@ -183,13 +181,12 @@ export function SettingsProvider({ children }) {
         try { await D1DatabaseService.syncUserData(); } catch {}
       }
 
-      // ── 6. 处理删除墓碑（FIX: 立即清理，防止远端已删除数据复活）────────────
+      // ── 6. 处理删除墓碑 ───────────────────────────────────────────────────
       const stones = getDeletedMemoTombstones();
       if (stones?.length) {
         const results = await Promise.allSettled(
           stones.map(t => D1ApiClient.deleteMemo(t.id).catch(() => D1DatabaseService.deleteMemo(t.id).catch(() => {})))
         );
-        // 只移除成功的墓碑
         const succeeded = stones.filter((_, i) => results[i].status === 'fulfilled');
         if (succeeded.length) removeDeletedMemoTombstones(succeeded.map(t => t.id));
       }
@@ -270,7 +267,6 @@ export function SettingsProvider({ children }) {
               } else {
                 const lTime = new Date(lm.updatedAt || 0).getTime();
                 const cTime = new Date(cm.updatedAt || 0).getTime();
-                // FIX: 双向取最新，相等时优先云端
                 if (cTime >= lTime) localMap.set(String(cm.id), { ...lm, ...cm });
               }
             }
