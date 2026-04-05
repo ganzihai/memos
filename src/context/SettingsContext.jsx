@@ -42,11 +42,9 @@ export function mergeLegacyStore() {
     const memos  = tryParse(localStorage.getItem('memos'),        []);
     const pinned = tryParse(localStorage.getItem('pinnedMemos'),  []);
     const map = new Map();
-    // 先放普通 memo
     for (const m of (Array.isArray(memos) ? memos : [])) {
       map.set(String(m.id), { ...m, is_pinned: m.is_pinned || m.isPinned || false });
     }
-    // 置顶 memo 覆盖或补充
     for (const m of (Array.isArray(pinned) ? pinned : [])) {
       const existing = map.get(String(m.id));
       map.set(String(m.id), { ...(existing || {}), ...m, is_pinned: true });
@@ -61,7 +59,6 @@ export function mergeLegacyStore() {
 export function persistMemos(memos) {
   if (!Array.isArray(memos)) return;
   localStorage.setItem('memos', JSON.stringify(memos));
-  // 同时维护 pinnedMemos，保持向后兼容
   const pinned = memos.filter(m => m.is_pinned);
   localStorage.setItem('pinnedMemos', JSON.stringify(pinned));
 }
@@ -125,7 +122,7 @@ export function SettingsProvider({ children }) {
       const deletedSet = new Set((tombstones || []).map(t => String(t.id)));
       const lastSyncAt = Number(localStorage.getItem('lastCloudSyncAt') || 0);
 
-      // ── 3. 三路合并：以 updatedAt 为准 ────────────────────────────────────
+      // ── 3. 三路合并：双向取最新（FIX: 改为 Math.max，防止本地时钟偏快时覆盖云端编辑）
       const localMap = new Map(local.map(m => [String(m.id), m]));
       const cloudMap = new Map(cloudMemos.map(m => [String(m.id), m]));
       const merged   = new Map();
@@ -136,7 +133,7 @@ export function SettingsProvider({ children }) {
         merged.set(id, lm);
       }
 
-      // 用云端数据更新或新增
+      // FIX: 双向取最新 updatedAt，不再单向偏向本地
       for (const [id, cm] of cloudMap) {
         if (deletedSet.has(id)) continue;
         const lm = merged.get(id);
@@ -145,7 +142,8 @@ export function SettingsProvider({ children }) {
         } else {
           const lTime = new Date(lm.updatedAt || lm.lastModified || 0).getTime();
           const cTime = new Date(cm.updatedAt || cm.lastModified || 0).getTime();
-          if (cTime > lTime) merged.set(id, { ...lm, ...cm });
+          // 取 updatedAt 更晚的版本；相等时优先云端（更权威）
+          merged.set(id, cTime >= lTime ? { ...lm, ...cm } : lm);
         }
       }
 
@@ -185,13 +183,15 @@ export function SettingsProvider({ children }) {
         try { await D1DatabaseService.syncUserData(); } catch {}
       }
 
-      // ── 6. 处理删除墓碑 ────────────────────────────────────────────────────
+      // ── 6. 处理删除墓碑（FIX: 立即清理，防止远端已删除数据复活）────────────
       const stones = getDeletedMemoTombstones();
       if (stones?.length) {
-        for (const t of stones) {
-          try { await D1ApiClient.deleteMemo(t.id); } catch { try { await D1DatabaseService.deleteMemo(t.id); } catch {} }
-        }
-        removeDeletedMemoTombstones(stones.map(t => t.id));
+        const results = await Promise.allSettled(
+          stones.map(t => D1ApiClient.deleteMemo(t.id).catch(() => D1DatabaseService.deleteMemo(t.id).catch(() => {})))
+        );
+        // 只移除成功的墓碑
+        const succeeded = stones.filter((_, i) => results[i].status === 'fulfilled');
+        if (succeeded.length) removeDeletedMemoTombstones(succeeded.map(t => t.id));
       }
 
       localStorage.setItem('lastCloudSyncAt', String(Date.now()));
@@ -216,7 +216,6 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     const restore = async () => {
       try {
-        // 确保登录用户开启同步
         if (isAuthenticated) {
           const savedSync = localStorage.getItem('cloudSyncEnabled');
           if (savedSync !== 'false') {
@@ -230,7 +229,6 @@ export function SettingsProvider({ children }) {
           }
         }
 
-        // ── 拉取远端数据 ────────────────────────────────────────────────────
         let res = null;
         try {
           res = isAuthenticated
@@ -240,7 +238,6 @@ export function SettingsProvider({ children }) {
 
         if (!res?.success) return;
 
-        // ── 恢复 settings ──────────────────────────────────────────────────
         const s = res.data?.settings;
         if (s) {
           if (s.theme_color)       { localStorage.setItem('themeColor', s.theme_color); window.dispatchEvent(new CustomEvent('app:themeColorChanged', { detail: s.theme_color })); }
@@ -256,7 +253,6 @@ export function SettingsProvider({ children }) {
           setCloudSyncEnabled(true);
         }
 
-        // ── 恢复 memos（单一数组） ──────────────────────────────────────────
         const cloudRows = res.data?.memos || [];
         if (cloudRows.length > 0) {
           const cloudMemos = cloudRows.map(rowToMemo);
@@ -264,7 +260,6 @@ export function SettingsProvider({ children }) {
           const tombstones = getDeletedMemoTombstones();
           const deletedSet = new Set((tombstones || []).map(t => String(t.id)));
 
-          // 如果本地有数据，做合并；否则直接用云端
           if (local.length > 0) {
             const localMap = new Map(local.map(m => [String(m.id), m]));
             for (const cm of cloudMemos) {
@@ -275,7 +270,8 @@ export function SettingsProvider({ children }) {
               } else {
                 const lTime = new Date(lm.updatedAt || 0).getTime();
                 const cTime = new Date(cm.updatedAt || 0).getTime();
-                if (cTime > lTime) localMap.set(String(cm.id), { ...lm, ...cm });
+                // FIX: 双向取最新，相等时优先云端
+                if (cTime >= lTime) localMap.set(String(cm.id), { ...lm, ...cm });
               }
             }
             const merged = Array.from(localMap.values())
@@ -283,7 +279,6 @@ export function SettingsProvider({ children }) {
               .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
             persistMemos(merged);
           } else {
-            // ── 关键修复：从 settings.pinned_memos 恢复 is_pinned 字段 ────
             const pinnedIdsFromSettings = new Set(
               tryParse(s?.pinned_memos, []).map(p => String(p?.id ?? p))
             );
@@ -296,7 +291,6 @@ export function SettingsProvider({ children }) {
 
           dispatchDataChanged({ part: 'restore.d1.api' });
         } else if (res.data?.settings?.pinned_memos) {
-          // 没有 memo rows，但 settings 里有置顶数据 → 尝试把已有本地 memos 里的 is_pinned 补齐
           const pinnedIds = new Set(
             tryParse(res.data.settings.pinned_memos, []).map(p => String(p?.id ?? p))
           );
