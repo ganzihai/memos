@@ -24,10 +24,11 @@ export class D1ApiClient {
   static async upsertMemo(memo) {
     const now = new Date().toISOString();
     const payload = {
-      memo_id:    memo.id,
+      // 【修复】确保传给后端的是字符串ID
+      memo_id:    String(memo.id),
       content:    memo.content,
       tags:       memo.tags || [],
-      backlinks:  Array.isArray(memo.backlinks)   ? memo.backlinks   : [],
+      backlinks:  Array.isArray(memo.backlinks)   ? memo.backlinks.map(String)   : [],
       audio_clips:Array.isArray(memo.audioClips)  ? memo.audioClips  : [],
       is_public:  memo.is_public  ? 1 : 0,
       is_pinned:  memo.is_pinned  ? 1 : 0,
@@ -51,7 +52,8 @@ export class D1ApiClient {
    * @param {{ is_public?: boolean, is_pinned?: boolean, pinned_at?: string|null }} meta
    */
   static async updateMemoMeta(memoId, meta) {
-    const payload = { memo_id: memoId, ...meta };
+    // 【修复】
+    const payload = { memo_id: String(memoId), ...meta };
     try {
       const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
         method: 'PATCH',
@@ -69,7 +71,8 @@ export class D1ApiClient {
    * 删除 memo
    */
   static async deleteMemo(memoId) {
-    const res = await fetch(`${this.getBaseUrl()}/api/memos?memoId=${memoId}`, {
+    // 【修复】
+    const res = await fetch(`${this.getBaseUrl()}/api/memos?memoId=${String(memoId)}`, {
       method: 'DELETE',
     });
     const result = await res.json();
@@ -90,17 +93,17 @@ export class D1ApiClient {
       const allMemos = [...(data.memos || [])];
       if (Array.isArray(data.pinnedMemos)) {
         for (const pm of data.pinnedMemos) {
-          if (!allMemos.some(m => m.id === pm.id)) allMemos.push(pm);
+          if (!allMemos.some(m => String(m.id) === String(pm.id))) allMemos.push(pm);
         }
       }
 
       if (allMemos.length > 0) {
         const pinnedIds = new Set((data.pinnedMemos || []).map(m => String(m.id)));
         const payload = allMemos.map(memo => ({
-          memo_id:    memo.id,
+          memo_id:    String(memo.id), // 【修复】
           content:    memo.content,
           tags:       memo.tags || [],
-          backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+          backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks.map(String)  : [],
           audio_clips:Array.isArray(memo.audioClips) ? memo.audioClips : [],
           is_public:  memo.is_public  ? 1 : 0,
           is_pinned:  (pinnedIds.has(String(memo.id)) || memo.is_pinned) ? 1 : 0,
@@ -155,10 +158,12 @@ export class D1ApiClient {
    */
   static async updatePinnedIds(pinnedIds) {
     try {
+      // 【修复】确保存为字符串
+      const safeIds = pinnedIds.map(String);
       const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pinned_ids: pinnedIds }),
+        body: JSON.stringify({ pinned_ids: safeIds }),
       });
       return await res.json();
     } catch (error) {
@@ -266,10 +271,10 @@ export class D1ApiClient {
     try {
       const now = new Date().toISOString();
       const payload = JSON.stringify({
-        memo_id:    memo.id,
+        memo_id:    String(memo.id), // 【修复】
         content:    memo.content,
         tags:       memo.tags || [],
-        backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks  : [],
+        backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks.map(String)  : [],
         audio_clips:Array.isArray(memo.audioClips) ? memo.audioClips : [],
         is_public:  memo.is_public  ? 1 : 0,
         is_pinned:  memo.is_pinned  ? 1 : 0,
