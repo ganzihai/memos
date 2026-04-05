@@ -26,7 +26,6 @@ import { toast } from 'sonner';
 
 // ── 工具 ───────────────────────────────────────────────────────────────────────
 const normalizeMemo = (m) => ({
-  // 【修复点 1】: 强制所有的 ID 无论从何处来，都变为标准的 String，防止严格比较失败
   id:           String(m.id || m.memo_id || m.memoId),
   content:      m.content      || '',
   tags:         Array.isArray(m.tags)       ? m.tags       : [],
@@ -54,6 +53,7 @@ const Index = () => {
   const memosRef = useRef([]);
 
   // 所有写操作都通过此函数，确保 ref、state、localStorage 三者同步
+  // 注意：persistMemos 是幂等的本地写入，与 _scheduleCloudSync（远端同步）互不干扰
   const setMemos = useCallback((updater) => {
     setMemosState(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -293,16 +293,16 @@ const Index = () => {
     const tags = [...newMemo.matchAll(/(?:^|\s)#([^\s#][\u4e00-\u9fa5a-zA-Z0-9_\/]*)/g)]
       .map(m => m[1]).filter((t, i, s) => s.indexOf(t) === i && t.length > 0);
     const now  = new Date().toISOString();
-    const id   = String(Date.now()); // 【修复点 2】: 强转为 String，避免本地数据与远端不一致
+    const id   = String(Date.now());
     const obj  = normalizeMemo({
       id, content: newMemo, tags,
       createdAt: now, updatedAt: now, timestamp: now, lastModified: now,
       backlinks: pendingNewBacklinks || [], audioClips: pendingNewAudioClips || [],
       is_public: false, is_pinned: false,
     });
-    
+
     const linkedIds = [...(pendingNewBacklinks || [])].map(String);
-    
+
     setMemos(prev => {
       const withLinks = prev.map(m =>
         linkedIds.includes(String(m.id))
@@ -311,25 +311,23 @@ const Index = () => {
       );
       return [obj, ...withLinks];
     });
-    
+
     setNewMemo('');
     setPendingNewBacklinks([]);
     setPendingNewAudioClips([]);
 
-    // 【修复点 3】: 将同步操作转为 async 异步，彻底避免老数据覆盖新数据的竞态问题
     (async () => {
       try {
         await D1ApiClient.upsertMemo(obj);
         if (linkedIds.length > 0) {
           await Promise.all(linkedIds.map(lid => {
-             const m = memosRef.current.find(x => String(x.id) === String(lid));
-             return m ? D1ApiClient.upsertMemo(m) : Promise.resolve();
+            const m = memosRef.current.find(x => String(x.id) === String(lid));
+            return m ? D1ApiClient.upsertMemo(m) : Promise.resolve();
           }));
         }
-        // 确保写完后再拉取
         _scheduleCloudSync?.('memo-add');
       } catch (err) {
-        console.error("同步到D1失败:", err);
+        console.error('同步到D1失败:', err);
       }
     })();
   }, [newMemo, pendingNewBacklinks, pendingNewAudioClips, setMemos, _scheduleCloudSync]);
@@ -517,7 +515,8 @@ const Index = () => {
   }, [isCanvasMode]);
 
   const handleCanvasAddMemo = useCallback((memo) => {
-    const obj = normalizeMemo({ ...memo, is_pinned: !memo.content?.trim() ? true : false });
+    // 【修复】is_pinned 取 memo 自身的值，不以内容是否为空来决定，避免空内容卡片默认全部置顶
+    const obj = normalizeMemo({ ...memo, is_pinned: memo.is_pinned ?? false });
     setMemos(prev => { uploadMemo(obj); _scheduleCloudSync?.('canvas-add'); return [obj, ...prev]; });
   }, [setMemos, uploadMemo, _scheduleCloudSync]);
 

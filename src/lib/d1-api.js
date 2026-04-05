@@ -24,7 +24,6 @@ export class D1ApiClient {
   static async upsertMemo(memo) {
     const now = new Date().toISOString();
     const payload = {
-      // 【修复】确保传给后端的是字符串ID
       memo_id:    String(memo.id),
       content:    memo.content,
       tags:       memo.tags || [],
@@ -52,8 +51,13 @@ export class D1ApiClient {
    * @param {{ is_public?: boolean, is_pinned?: boolean, pinned_at?: string|null }} meta
    */
   static async updateMemoMeta(memoId, meta) {
-    // 【修复】
-    const payload = { memo_id: String(memoId), ...meta };
+    // 【修复】将 boolean 转为 D1 兼容的 0/1 整数，避免存入字符串 "true"/"false"
+    const payload = {
+      memo_id: String(memoId),
+      ...meta,
+      ...(meta.is_public  !== undefined ? { is_public:  meta.is_public  ? 1 : 0 } : {}),
+      ...(meta.is_pinned  !== undefined ? { is_pinned:  meta.is_pinned  ? 1 : 0 } : {}),
+    };
     try {
       const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
         method: 'PATCH',
@@ -71,7 +75,6 @@ export class D1ApiClient {
    * 删除 memo
    */
   static async deleteMemo(memoId) {
-    // 【修复】
     const res = await fetch(`${this.getBaseUrl()}/api/memos?memoId=${String(memoId)}`, {
       method: 'DELETE',
     });
@@ -89,7 +92,7 @@ export class D1ApiClient {
     try {
       const now = new Date().toISOString();
 
-      // 合并普通 memos 和 pinned memos
+      // 合并普通 memos 和 pinned memos（去重）
       const allMemos = [...(data.memos || [])];
       if (Array.isArray(data.pinnedMemos)) {
         for (const pm of data.pinnedMemos) {
@@ -100,7 +103,7 @@ export class D1ApiClient {
       if (allMemos.length > 0) {
         const pinnedIds = new Set((data.pinnedMemos || []).map(m => String(m.id)));
         const payload = allMemos.map(memo => ({
-          memo_id:    String(memo.id), // 【修复】
+          memo_id:    String(memo.id),
           content:    memo.content,
           tags:       memo.tags || [],
           backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks.map(String)  : [],
@@ -119,7 +122,8 @@ export class D1ApiClient {
         });
         const r = await res.json();
         if (!r.success) {
-          // 降级逐个同步
+          // 【修复】仅在后端逻辑错误时降级逐个同步；网络错误（fetch 抛异常）直接向上 throw，不做无谓重试
+          console.warn('批量同步失败，降级逐个同步:', r.error);
           for (const memo of allMemos) {
             try { await this.upsertMemo(memo); } catch (e) {
               console.error('逐个同步memo失败:', memo.id, e);
@@ -145,6 +149,7 @@ export class D1ApiClient {
 
       return { success: true, message: '数据同步到D1成功' };
     } catch (error) {
+      // 网络错误或 upsertUserSettings 失败时直接抛出，不再尝试降级
       console.error('D1数据同步失败:', error);
       return { success: false, message: error.message };
     }
@@ -158,7 +163,6 @@ export class D1ApiClient {
    */
   static async updatePinnedIds(pinnedIds) {
     try {
-      // 【修复】确保存为字符串
       const safeIds = pinnedIds.map(String);
       const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
         method: 'PATCH',
@@ -271,7 +275,7 @@ export class D1ApiClient {
     try {
       const now = new Date().toISOString();
       const payload = JSON.stringify({
-        memo_id:    String(memo.id), // 【修复】
+        memo_id:    String(memo.id),
         content:    memo.content,
         tags:       memo.tags || [],
         backlinks:  Array.isArray(memo.backlinks)  ? memo.backlinks.map(String)  : [],
