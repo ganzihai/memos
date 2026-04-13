@@ -390,7 +390,7 @@ export function SettingsProvider({ children }) {
             try {
               const match = /^(.*?);base64,(.*)$/.exec(cfg.imageUrl || '');
               const mime  = match ? match[1] : 'image/png';
-              const stored = await largeFileStorage.storeFile({ name: 'background-image', size: 0, type: mime,  cfg.imageUrl });
+              const stored = await largeFileStorage.storeFile({ name: 'background-image', size: 0, type: mime,  data: cfg.imageUrl });
               toSave.imageRef = { id: stored.id, type: mime, storedAt: new Date().toISOString() };
             } catch {}
           }
