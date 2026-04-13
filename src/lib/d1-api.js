@@ -198,7 +198,9 @@ export class D1ApiClient {
    */
   static async getPublicData() {
     try {
-      const res = await fetch(`${this.getBaseUrl()}/api/memos?public_only=true`);
+      const res = await fetch(`${this.getBaseUrl()}/api/memos?public_only=true`, {
+        headers: await this.getHeaders()
+      });
       const r   = await res.json();
       if (!r.success) throw new Error(r.error || '获取公开数据失败');
       return {
@@ -218,9 +220,10 @@ export class D1ApiClient {
   static async restoreUserData() {
     try {
       const base = this.getBaseUrl();
+      const headers = await this.getHeaders();
       const [memosRes, settingsRes] = await Promise.all([
-        fetch(`${base}/api/memos`),
-        fetch(`${base}/api/settings`),
+        fetch(`${base}/api/memos`, { headers }),
+        fetch(`${base}/api/settings`, { headers }),
       ]);
       const [memosResult, settingsResult] = await Promise.all([
         memosRes.json(),
