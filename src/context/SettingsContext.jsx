@@ -382,15 +382,15 @@ export function SettingsProvider({ children }) {
     const persist = async () => {
       try {
         const cfg = backgroundConfig || {};
-        const isDataUrl = typeof cfg.imageUrl === 'string' && cfg.imageUrl.startsWith('data:');
+        const isDataUrl = typeof cfg.imageUrl === 'string' && cfg.imageUrl.startsWith('');
         const tooLarge  = isDataUrl && cfg.imageUrl.length > 100_000;
         let toSave = { ...cfg };
         if (tooLarge) {
           if (!toSave.imageRef?.id) {
             try {
-              const match = /^data:(.*?);base64,(.*)$/.exec(cfg.imageUrl || '');
+              const match = /^(.*?);base64,(.*)$/.exec(cfg.imageUrl || '');
               const mime  = match ? match[1] : 'image/png';
-              const stored = await largeFileStorage.storeFile({ name: 'background-image', size: 0, type: mime, data: cfg.imageUrl });
+              const stored = await largeFileStorage.storeFile({ name: 'background-image', size: 0, type: mime,  cfg.imageUrl });
               toSave.imageRef = { id: stored.id, type: mime, storedAt: new Date().toISOString() };
             } catch {}
           }
