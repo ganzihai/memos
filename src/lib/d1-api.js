@@ -149,7 +149,6 @@ export class D1ApiClient {
         backgroundConfig: data.backgroundConfig,
         avatarConfig:     data.avatarConfig,
         canvasConfig:     data.canvasConfig,
-        musicConfig:      data.musicConfig,
         s3Config:         data.s3Config,
         updated_at:       now,
       });
@@ -177,7 +176,6 @@ export class D1ApiClient {
     if (settings.backgroundConfig !== undefined) payload.background_config = settings.backgroundConfig;
     if (settings.avatarConfig     !== undefined) payload.avatar_config     = settings.avatarConfig;
     if (settings.canvasConfig     !== undefined) payload.canvas_config     = settings.canvasConfig;
-    if (settings.musicConfig      !== undefined) payload.music_config      = settings.musicConfig;
     if (settings.s3Config         !== undefined) payload.s3_config         = settings.s3Config;
     payload.updated_at = settings.updated_at || new Date().toISOString();
 

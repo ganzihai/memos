@@ -6,7 +6,6 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { navItems } from "./nav-items";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { SettingsProvider } from "@/context/SettingsContext";
-import { MusicProvider } from "@/context/MusicContext";
 import { PasswordAuthProvider, usePasswordAuth } from "@/context/PasswordAuthContext";
 import Login from "@/pages/Login";
 import LoginDialog from "@/components/LoginDialog";
@@ -60,13 +59,11 @@ const App = () => (
     <PasswordAuthProvider>
       <ThemeProvider>
         <SettingsProvider>
-          <MusicProvider>
-            <TooltipProvider>
-              <Toaster />
-              <DesktopConfigCheck />
-              <AppContent />
-            </TooltipProvider>
-          </MusicProvider>
+          <TooltipProvider>
+            <Toaster />
+            <DesktopConfigCheck />
+            <AppContent />
+          </TooltipProvider>
         </SettingsProvider>
       </ThemeProvider>
     </PasswordAuthProvider>

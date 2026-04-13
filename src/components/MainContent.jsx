@@ -25,7 +25,7 @@ const MainContent = ({
   editingId,
   editContent,
   activeTag,
-  activeDate, // 新增日期筛选状态
+  activeDate,
   showScrollToTop,
 
   // Refs
@@ -45,12 +45,9 @@ const MainContent = ({
   onCancelEdit,
   onTagClick,
   onScrollToTop,
-  clearFilters, // 新增清除筛选函数
+  clearFilters,
   onEditorFocus,
   onEditorBlur,
-  onOpenMusic,
-  onOpenMusicSearch,
-  musicEnabled = true,
   // backlinks
   allMemos,
   onAddBacklink,
@@ -76,7 +73,6 @@ const MainContent = ({
             setSearchQuery={setSearchQuery}
             searchInputRef={searchInputRef}
             onMobileMenuOpen={onMobileMenuOpen}
-            onOpenMusicSearch={onOpenMusicSearch}
           />
 
           {isAuthenticated && (

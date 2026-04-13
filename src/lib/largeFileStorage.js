@@ -3,7 +3,7 @@ class LargeFileStorage {
   constructor() {
     this.dbName = 'MeowNocodeLargeFileStorage';
     this.dbVersion = 1;
-    this.storeName = 'musicFiles';
+    this.storeName = 'files';
     this.db = null;
     this.initPromise = this.initDB();
   }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Search, Headphones, RefreshCw } from 'lucide-react';
+import { Menu, Search, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -10,9 +10,6 @@ const Header = ({
   setSearchQuery,
   searchInputRef,
   onMobileMenuOpen,
-  onOpenMusic,
-  onOpenMusicSearch, // 新增：触发音乐搜索卡片
-  musicEnabled = true,
 }) => {
   const { themeColor } = useTheme();
   const { refreshPublicData } = useSettings();

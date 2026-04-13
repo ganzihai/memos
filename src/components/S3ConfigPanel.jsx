@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Upload, TestTube, Save } from 'lucide-react';
+import { Cloud, TestTube, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import s3StorageService from '@/lib/s3Storage';
 
@@ -245,7 +245,7 @@ export default function S3ConfigPanel({ s3Config, updateS3Config }) {
                 placeholder={getProviderTemplate(formData.provider).placeholder.bucket}
               />
               <p className="text-xs text-gray-500">
-                存储桶名称，例如: my-music-files
+                存储桶名称，例如: your-bucket-name
               </p>
             </div>
 
