@@ -245,7 +245,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           } else {
             throw new Error("No DOM element available to append Mermaid container");
           }
-
+          await new Promise(resolve => setTimeout(resolve, 10));
           // 尝试渲染
           // mermaid.render 在新版本中的签名是: render(id, text, container?)
           // 但有时容器可能还没有准备好，我们可以只传 id 和 text
