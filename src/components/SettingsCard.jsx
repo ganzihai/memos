@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { X, Palette, Download, Upload, AlertCircle, CheckCircle, Settings, Database, ChevronDown, ChevronUp, Check, Image as ImageIcon, Github, Cloud, Server, Key, Bot, Keyboard, Star, Music2, Type, Quote } from 'lucide-react';
+import { X, Palette, Download, Upload, AlertCircle, CheckCircle, Settings, Database, ChevronDown, ChevronUp, Check, Image as ImageIcon, Github, Cloud, Server, Key, Bot, Keyboard, Star, Type, Quote } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useSettings } from '@/context/SettingsContext';
 import { usePasswordAuth } from '@/context/PasswordAuthContext';
@@ -12,7 +12,6 @@ import { D1ApiClient } from '@/lib/d1-api';
 import ImageUpload from './ImageUpload';
 import { toast } from 'sonner';
 import MemosImport from './MemosImport';
-import MusicListManager from './MusicListManager';
 import S3ConfigPanel from './S3ConfigPanel';
 
 const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
@@ -36,8 +35,6 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     keyboardShortcuts = { toggleSidebar: 'Ctrl+B', openAIDialog: 'Ctrl+K', openSettings: 'Ctrl+,', toggleCanvasMode: 'Ctrl+Shift+C', openDailyReview: 'Ctrl+R' },
     updateKeyboardShortcuts = () => {},
     _scheduleCloudSync = () => {},
-    musicConfig = { enabled: false, playlists: [] },
-    updateMusicConfig = () => {},
     s3Config = { enabled: false },
     updateS3Config = () => {},
   } = settingsCtx;
@@ -52,7 +49,6 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
     font: false,
     appearance: false,
   ai: false,
-  music: false,
     keyboard: false,
     storage: false,
     about: false
@@ -884,77 +880,6 @@ const SettingsCard = ({ isOpen, onClose, onOpenTutorial }) => {
                 )}
               </div>
 
-              {/* 音乐功能 - 折叠面板（放在外观设置下面） */}
-              <div className="space-y-4">
-                <div
-                  className="flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  onClick={() => toggleSection('music')}
-                >
-                  <Label className="text-sm font-medium cursor-pointer flex items-center">
-                    <Music2 className="h-4 w-4 mr-2" />
-                    音乐功能
-                  </Label>
-                  <button
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSection('music');
-                    }}
-                  >
-                    {expandedSections.music ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-
-                {expandedSections.music && (
-                  <div className="animate-in slide-in-from-top-2 duration-200">
-                    <div className="space-y-4 pl-4 pr-2 pb-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm">启用音乐功能</Label>
-                        <button
-                          onClick={() => {
-                            const next = !musicConfig.enabled;
-                            updateMusicConfig({ enabled: next });
-                            if (!next) {
-                              try {
-                                window.dispatchEvent(new CustomEvent('music:globalDisable'));
-                              } catch {}
-                            }
-                          }}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            musicConfig.enabled
-                              ? 'bg-blue-600'
-                              : 'bg-gray-200 dark:bg-gray-700'
-                          }`}
-                          style={musicConfig.enabled ? { backgroundColor: themeColor } : {}}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              musicConfig.enabled ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        关闭后：隐藏所有音乐按钮与小组件，且停止播放。
-                      </p>
-                      
-                      {/* 音乐列表管理器 */}
-                      {musicConfig.enabled && (
-                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                          <MusicListManager 
-                            musicConfig={musicConfig} 
-                            updateMusicConfig={updateMusicConfig} 
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
 
               {/* S3存储配置 - 移动到数据标签页 */}
               {/* 已移动到数据标签页 */}

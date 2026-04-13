@@ -14,9 +14,6 @@ import AIDialog from '@/components/AIDialog';
 import DailyReview from '@/components/DailyReview';
 import TutorialDialog from '@/components/TutorialDialog';
 import MemoPreviewDialog from '@/components/MemoPreviewDialog';
-import MusicModal from '@/components/MusicModal';
-import MiniMusicPlayer from '@/components/MiniMusicPlayer';
-import MusicSearchCard from '@/components/MusicSearchCard';
 import { useSettings } from '@/context/SettingsContext';
 import { persistMemos, mergeLegacyStore } from '@/context/SettingsContext';
 import { usePasswordAuth } from '@/context/PasswordAuthContext';
@@ -101,13 +98,6 @@ const Index = () => {
   const [pendingNewBacklinks, setPendingNewBacklinks] = useState([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [pendingNewAudioClips, setPendingNewAudioClips] = useState([]);
-  const [musicSearchOpen, setMusicSearchOpen]     = useState(false);
-  const [musicSearchKeyword, setMusicSearchKeyword] = useState('');
-  const [musicModal, setMusicModal] = useState({
-    isOpen: false, title: '鲜花',
-    musicUrl: 'https://pic.lover.nyc.mn/2025-08/回春丹 - 鲜花_1755699293512.flac',
-    cover: '/images/xh.jpg', author: '回春丹', danmakuText: '好听', enableDanmaku: true,
-  });
   const [currentRandomBgUrl, setCurrentRandomBgUrl] = useState('');
 
   // ─ Refs ──────────────────────────────────────────────────────────────────────
@@ -117,7 +107,7 @@ const Index = () => {
   const memosContainerRef = useRef(null);
 
   // ─ Context ───────────────────────────────────────────────────────────────────
-  const { backgroundConfig, updateBackgroundConfig, aiConfig, keyboardShortcuts, musicConfig, _scheduleCloudSync } = useSettings();
+  const { backgroundConfig, updateBackgroundConfig, aiConfig, keyboardShortcuts, _scheduleCloudSync } = useSettings();
   const { isAuthenticated } = usePasswordAuth();
 
   // ─ 从 localStorage 初始化（含旧格式兼容） ────────────────────────────────────
@@ -181,7 +171,7 @@ const Index = () => {
     let t;
     const h = (e) => {
       if (e.target?.closest?.('.sidebar-hover-block')) return;
-      if (canvasToolPanelVisible || isAIDialogOpen || isDailyReviewOpen || document.body.getAttribute('data-music-modal-open') === 'true') return;
+      if (canvasToolPanelVisible || isAIDialogOpen || isDailyReviewOpen ) return;
       if (!isLeftSidebarPinned) {
         if (e.clientX < 50)  { clearTimeout(t); t = setTimeout(() => setIsLeftSidebarHovered(true),  150); }
         else if (e.clientX > 350 && isLeftSidebarHovered) { clearTimeout(t); t = setTimeout(() => setIsLeftSidebarHovered(false), 200); }
@@ -195,7 +185,7 @@ const Index = () => {
     let t;
     const h = (e) => {
       if (e.target?.closest?.('.sidebar-hover-block')) return;
-      if (isAIDialogOpen || isDailyReviewOpen || document.body.getAttribute('data-music-modal-open') === 'true') return;
+      if (isAIDialogOpen || isDailyReviewOpen ) return;
       if (!isRightSidebarPinned) {
         if (e.clientX > window.innerWidth - 50) { clearTimeout(t); t = setTimeout(() => setIsRightSidebarHovered(true),  150); }
         else if (e.clientX < window.innerWidth - 350 && isRightSidebarHovered) { clearTimeout(t); t = setTimeout(() => setIsRightSidebarHovered(false), 200); }
@@ -340,14 +330,15 @@ const Index = () => {
 
     if (action === 'toggle-public') {
       setMemos(prev => {
-        const next = prev.map(m => String(m.id) === targetId ? { ...m, is_public: !m.is_public, updatedAt: now } : m);
-        const target = next.find(m => String(m.id) === targetId);
-        toast.success(target?.is_public ? '已设为公开' : '已设为私有');
-        if (target) {
-          D1ApiClient.updateMemoMeta(targetId, { is_public: target.is_public })
-            .catch(() => uploadMemo(target));
-          _scheduleCloudSync?.('public-toggle');
-        }
+        const target = prev.find(m => String(m.id) === targetId);
+        if (!target) return prev;
+        const newIsPublic = !target.is_public;
+        const next = prev.map(m => String(m.id) === targetId ? { ...m, is_public: newIsPublic, updatedAt: now } : m);
+        toast.success(newIsPublic ? '已设为公开' : '已设为私有');
+        // 异步上传，不影响 UI 响应
+        D1ApiClient.updateMemoMeta(targetId, { is_public: newIsPublic })
+          .catch(() => D1ApiClient.upsertMemo(next.find(m => String(m.id) === targetId)));
+        _scheduleCloudSync?.('public-toggle');
         return next;
       });
 
@@ -356,25 +347,29 @@ const Index = () => {
         const target = prev.find(m => String(m.id) === targetId);
         if (!target || target.is_pinned) return prev;
         const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: true, pinnedAt: now, updatedAt: now } : m);
-        D1ApiClient.updateMemoMeta(targetId, { is_pinned: true, pinned_at: now }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
+        D1ApiClient.updateMemoMeta(targetId, { is_pinned: true, pinned_at: now })
+          .catch(() => D1ApiClient.upsertMemo(next.find(m => String(m.id) === targetId)));
         _scheduleCloudSync?.('memo-pin');
         return next;
       });
 
     } else if (action === 'unpin') {
       setMemos(prev => {
+        const target = prev.find(m => String(m.id) === targetId);
+        if (!target) return prev;
         const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: false, pinnedAt: null, updatedAt: now } : m);
-        D1ApiClient.updateMemoMeta(targetId, { is_pinned: false, pinned_at: null }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
+        D1ApiClient.updateMemoMeta(targetId, { is_pinned: false, pinned_at: null })
+          .catch(() => D1ApiClient.upsertMemo(next.find(m => String(m.id) === targetId)));
         _scheduleCloudSync?.('memo-unpin');
         return next;
       });
 
     } else if (action === 'edit') {
-      const m = memos.find(m => String(m.id) === targetId);
+      const m = memosRef.current.find(m => String(m.id) === targetId);
       if (m) { setEditingId(targetId); setEditContent(m.content); }
 
     } else if (action === 'share') {
-      const m = memos.find(m => String(m.id) === targetId);
+      const m = memosRef.current.find(m => String(m.id) === targetId);
       if (m) { setSelectedMemo(m); setIsShareDialogOpen(true); }
 
     } else if (action === 'delete') {
@@ -389,7 +384,7 @@ const Index = () => {
       });
     }
     setActiveMenuId(null);
-  }, [memos, setMemos, uploadMemo, _scheduleCloudSync]);
+  }, [setMemos, _scheduleCloudSync]);
 
   // ─ 保存编辑 ──────────────────────────────────────────────────────────────────
   const saveEdit = useCallback((memoId) => {
@@ -709,9 +704,6 @@ const Index = () => {
             pendingNewAudioClips={pendingNewAudioClips}
             onRemoveAudioClip={handleRemoveAudioClip}
             onAddAudioClip={handleAddAudioClip}
-            onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal(m => ({ ...m, isOpen: true })); }}
-            musicEnabled={!!musicConfig?.enabled}
-            onOpenMusicSearch={(q) => { setMusicSearchKeyword(q); setMusicSearchOpen(true); }}
             isAuthenticated={isAuthenticated}
           />
         )}
@@ -737,7 +729,6 @@ const Index = () => {
         onSettingsOpen={() => setIsSettingsOpen(true)}
         onDateClick={handleDateClick}
         isAuthenticated={isAuthenticated}
-        onOpenMusic={() => { if (musicConfig?.enabled) setMusicModal(m => ({ ...m, isOpen: true })); }}
       />
 
       <SettingsCard isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onOpenTutorial={() => setIsTutorialOpen(true)} />
@@ -750,14 +741,6 @@ const Index = () => {
         open={!!previewMemoId}
         onClose={() => setPreviewMemoId(null)}
       />
-
-      {musicConfig?.enabled && (
-        <>
-          <MusicModal isOpen={musicModal.isOpen} onClose={() => setMusicModal(m => ({ ...m, isOpen: false }))} danmakuText={musicModal.danmakuText} enableDanmaku={musicModal.enableDanmaku} />
-          {!isCanvasMode && <MiniMusicPlayer onOpenFull={() => setMusicModal(m => ({ ...m, isOpen: true }))} />}
-          <MusicSearchCard open={musicSearchOpen} keyword={musicSearchKeyword} onClose={() => setMusicSearchOpen(false)} />
-        </>
-      )}
 
       {!isCanvasMode && isAuthenticated && (
         <AIButton

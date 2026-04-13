@@ -74,24 +74,20 @@ export function SettingsProvider({ children }) {
   const [avatarConfig, setAvatarConfig] = useState({ imageUrl: '' });
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => isSelfHosted);
   const [aiConfig, setAiConfig] = useState({ baseUrl: '', apiKey: '', model: 'gpt-3.5-turbo', enabled: false });
-  const [musicConfig, setMusicConfig] = useState(() => {
-    try { const s = localStorage.getItem('musicConfig'); return s ? JSON.parse(s) : { enabled: false, customSongs: [] }; } catch { return { enabled: false, customSongs: [] }; }
-  });
   const [s3Config, setS3Config] = useState({ enabled: false, endpoint: '', accessKeyId: '', secretAccessKey: '', bucket: '', region: 'auto', publicUrl: '', provider: 'r2' });
   const [keyboardShortcuts, setKeyboardShortcuts] = useState({ toggleSidebar: 'Tab', openAIDialog: 'Ctrl+Space', openSettings: 'Ctrl+,', toggleCanvasMode: 'Ctrl+/', openDailyReview: 'Ctrl+\\' });
 
-  // ── 同步调度器 ──────────────────────────────────────────────────────────────
-  const syncTimerRef  = React.useRef(null);
-  const syncingRef    = React.useRef(false);
-  const pendingRef    = React.useRef(false);
-  const lastSyncAtRef = React.useRef(0);
+  const [syncTimerId, setSyncTimerId] = useState(null);
+  const syncingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const lastSyncAtRef = useRef(0);
 
   const dispatchDataChanged = (detail = {}) => {
     try { window.dispatchEvent(new CustomEvent('app:dataChanged', { detail })); } catch {}
   };
 
   // ── 核心同步函数 ─────────────────────────────────────────────────────────────
-  const doSync = React.useCallback(async () => {
+  const doSync = useCallback(async () => {
     if (!cloudSyncEnabled || !isAuthenticated) return;
     if (syncingRef.current) { pendingRef.current = true; return; }
 
@@ -171,7 +167,6 @@ export function SettingsProvider({ children }) {
           backgroundConfig: tryParse(localStorage.getItem('backgroundConfig'), { imageUrl: '', brightness: 50, blur: 10, useRandom: false }),
           avatarConfig:     tryParse(localStorage.getItem('avatarConfig'),     { imageUrl: '' }),
           canvasConfig:     tryParse(localStorage.getItem('canvasState'),      null),
-          musicConfig:      tryParse(localStorage.getItem('musicConfig'),      { enabled: false, customSongs: [] }),
           s3Config:         tryParse(localStorage.getItem('s3Config'),         { enabled: false }),
         });
       } catch (e) {
@@ -194,17 +189,24 @@ export function SettingsProvider({ children }) {
       syncingRef.current = false;
       if (pendingRef.current) {
         pendingRef.current = false;
-        clearTimeout(syncTimerRef.current);
-        syncTimerRef.current = setTimeout(doSync, 500);
+        clearTimeout(syncTimerId);
+        setTimeout(doSync, 500);
       }
     }
-  }, [cloudSyncEnabled, isAuthenticated]);
+  }, [cloudSyncEnabled, isAuthenticated, syncTimerId]);
 
-  const scheduleSync = React.useCallback((reason = 'change') => {
+  const scheduleSync = useCallback((reason = 'change') => {
     if (!cloudSyncEnabled) return;
-    clearTimeout(syncTimerRef.current);
     const since = Date.now() - lastSyncAtRef.current;
-    syncTimerRef.current = setTimeout(doSync, since < 1500 ? 800 : 200);
+    const delay = since < 1500 ? 800 : 200;
+    setSyncTimerId(prev => {
+      if (prev) clearTimeout(prev);
+      const id = setTimeout(() => {
+        doSync();
+        setSyncTimerId(null);
+      }, delay);
+      return id;
+    });
   }, [cloudSyncEnabled, doSync]);
 
   // ── 启动时恢复数据 ──────────────────────────────────────────────────────────
@@ -242,7 +244,6 @@ export function SettingsProvider({ children }) {
           if (s.background_config) { localStorage.setItem('backgroundConfig', s.background_config); try { setBackgroundConfig(JSON.parse(s.background_config)); } catch {} }
           if (s.avatar_config)     { localStorage.setItem('avatarConfig',     s.avatar_config);     try { setAvatarConfig(JSON.parse(s.avatar_config)); }       catch {} }
           if (s.canvas_config)     localStorage.setItem('canvasState',   s.canvas_config);
-          if (s.music_config)      { localStorage.setItem('musicConfig',  s.music_config);  try { setMusicConfig(JSON.parse(s.music_config)); }  catch {} }
           if (s.s3_config)         { localStorage.setItem('s3Config',     s.s3_config);     try { setS3Config(JSON.parse(s.s3_config)); }        catch {} }
           localStorage.setItem('cloudSyncEnabled', 'true');
           setCloudSyncEnabled(true);
@@ -371,7 +372,6 @@ export function SettingsProvider({ children }) {
   useEffect(() => { localStorage.setItem('avatarConfig',      JSON.stringify(avatarConfig));      dispatchDataChanged({ part: 'avatar' });     }, [avatarConfig]);
   useEffect(() => { localStorage.setItem('aiConfig',          JSON.stringify(aiConfig));          dispatchDataChanged({ part: 'ai' });         }, [aiConfig]);
   useEffect(() => { localStorage.setItem('keyboardShortcuts', JSON.stringify(keyboardShortcuts));                                              }, [keyboardShortcuts]);
-  useEffect(() => { localStorage.setItem('musicConfig',       JSON.stringify(musicConfig));       dispatchDataChanged({ part: 'music' });      }, [musicConfig]);
   useEffect(() => {
     if (isSelfHosted) { localStorage.setItem('cloudSyncEnabled', 'true'); return; }
     localStorage.setItem('cloudSyncEnabled', JSON.stringify(cloudSyncEnabled));
@@ -455,7 +455,6 @@ export function SettingsProvider({ children }) {
       cloudSyncEnabled,  updateCloudSyncEnabled:  (v) => { if (!isSelfHosted) setCloudSyncEnabled(v); },
       aiConfig,          updateAiConfig:          (v) => setAiConfig(p => ({ ...p, ...v })),
       keyboardShortcuts, updateKeyboardShortcuts: (v) => setKeyboardShortcuts(p => ({ ...p, ...v })),
-      musicConfig,       updateMusicConfig:       (v) => setMusicConfig(p => ({ ...p, ...v })),
       s3Config,          updateS3Config:          setS3Config,
       syncToD1,
       restoreFromD1,
