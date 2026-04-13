@@ -14,14 +14,19 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // 确保数据库表结构是最新的（自动迁移）
-  try {
-    await env.DB.exec(`ALTER TABLE memos ADD COLUMN is_public INTEGER DEFAULT 0`).catch(() => {});
-    await env.DB.exec(`ALTER TABLE memos ADD COLUMN is_pinned INTEGER DEFAULT 0`).catch(() => {});
-    await env.DB.exec(`ALTER TABLE memos ADD COLUMN pinned_at TEXT`).catch(() => {});
-    await env.DB.exec(`ALTER TABLE memos ADD COLUMN backlinks TEXT DEFAULT '[]'`).catch(() => {});
-    await env.DB.exec(`ALTER TABLE memos ADD COLUMN audio_clips TEXT DEFAULT '[]'`).catch(() => {});
-  } catch (_) {}
+  // 1. 鉴权校验逻辑
+  const password = env.PASSWORD;
+  const authHeader = request.headers.get('Authorization');
+  const providedPassword = authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader) : null;
+  const isAuthenticated = password && password.trim() ? (providedPassword === password.trim()) : true;
+
+  // 对于写操作，必须鉴权
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !isAuthenticated) {
+    return new Response(JSON.stringify({ success: false, message: '未授权访问' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 
   try {
     if (method === 'GET') {
@@ -30,9 +35,20 @@ export async function onRequest(context) {
 
       let query = 'SELECT * FROM memos';
       const conditions = [];
-      if (publicOnly) conditions.push('is_public = 1');
-      if (pinnedOnly) conditions.push('is_pinned = 1');
-      if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+      
+      // 如果未登录，强制只能看公开内容
+      if (!isAuthenticated || publicOnly) {
+        conditions.push('is_public = 1');
+      }
+      
+      if (pinnedOnly) {
+        conditions.push('is_pinned = 1');
+      }
+
+      if (conditions.length) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+      
       query += ' ORDER BY created_at DESC';
 
       const { results } = await env.DB.prepare(query).all();
@@ -46,19 +62,40 @@ export async function onRequest(context) {
       const body = await request.json();
 
       const processMemo = async (memoData) => {
-        const {
+        let {
           memo_id, content, tags, backlinks, audio_clips,
           is_public, is_pinned, pinned_at, created_at, updated_at
         } = memoData;
 
-        if (!memo_id || content === undefined || content === null) {
-          throw new Error('缺少必要参数 memo_id 或 content');
+        // 如果没有 memo_id，自动生成一个（主要是为了 n8n 等外部推送）
+        if (!memo_id) {
+          memo_id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+        } else {
+          memo_id = String(memo_id);
+        }
+
+        if (content === undefined || content === null) {
+          throw new Error('缺少必要参数 content');
         }
 
         const existingMemo = await env.DB
           .prepare('SELECT memo_id FROM memos WHERE memo_id = ?')
           .bind(memo_id)
           .first();
+
+        const now = new Date().toISOString();
+        const finalMemo = {
+          memo_id,
+          content,
+          tags: JSON.stringify(tags || []),
+          backlinks: JSON.stringify(backlinks || []),
+          audio_clips: JSON.stringify(audio_clips || []),
+          is_public: (is_public === 1 || is_public === true) ? 1 : 0,
+          is_pinned: (is_pinned === 1 || is_pinned === true) ? 1 : 0,
+          pinned_at: pinned_at || null,
+          created_at: existingMemo ? existingMemo.created_at : (created_at || now),
+          updated_at: updated_at || now
+        };
 
         if (existingMemo) {
           await env.DB
@@ -67,14 +104,14 @@ export async function onRequest(context) {
                    is_public = ?, is_pinned = ?, pinned_at = ?, updated_at = ?
              WHERE memo_id = ?`)
             .bind(
-              content,
-              JSON.stringify(tags || []),
-              JSON.stringify(backlinks || []),
-              JSON.stringify(audio_clips || []),
-              is_public ? 1 : 0,
-              is_pinned ? 1 : 0,
-              pinned_at || null,
-              updated_at || new Date().toISOString(),
+              finalMemo.content,
+              finalMemo.tags,
+              finalMemo.backlinks,
+              finalMemo.audio_clips,
+              finalMemo.is_public,
+              finalMemo.is_pinned,
+              finalMemo.pinned_at,
+              finalMemo.updated_at,
               memo_id
             )
             .run();
@@ -85,18 +122,24 @@ export async function onRequest(context) {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .bind(
               memo_id,
-              content,
-              JSON.stringify(tags || []),
-              JSON.stringify(backlinks || []),
-              JSON.stringify(audio_clips || []),
-              is_public ? 1 : 0,
-              is_pinned ? 1 : 0,
-              pinned_at || null,
-              created_at || new Date().toISOString(),
-              updated_at || new Date().toISOString()
+              finalMemo.content,
+              finalMemo.tags,
+              finalMemo.backlinks,
+              finalMemo.audio_clips,
+              finalMemo.is_public,
+              finalMemo.is_pinned,
+              finalMemo.pinned_at,
+              finalMemo.created_at,
+              finalMemo.updated_at
             )
             .run();
         }
+        return {
+          ...finalMemo,
+          tags: tags || [],
+          backlinks: backlinks || [],
+          audio_clips: audio_clips || []
+        };
       };
 
       if (Array.isArray(body)) {
@@ -110,8 +153,8 @@ export async function onRequest(context) {
         });
       } else {
         try {
-          await processMemo(body);
-          return new Response(JSON.stringify({ success: true, message: 'Memo保存成功' }), {
+          const processed = await processMemo(body);
+          return new Response(JSON.stringify({ success: true, message: 'Memo保存成功', data: processed }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         } catch (e) {

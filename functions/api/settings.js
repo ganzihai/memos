@@ -13,6 +13,20 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // 1. 鉴权校验
+  const password = env.PASSWORD;
+  if (password && password.trim()) {
+    const authHeader = request.headers.get('Authorization');
+    const providedPassword = authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader) : null;
+    
+    if (providedPassword !== password.trim()) {
+      return new Response(JSON.stringify({ success: false, message: '未授权访问' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
   try {
     if (method === 'GET') {
       const settings = await env.DB

@@ -162,10 +162,8 @@ export function SettingsProvider({ children }) {
 
       // ── 5. 推送本地到远端（上行） ──────────────────────────────────────────
       try {
-        const pinnedArr = mergedArr.filter(m => m.is_pinned);
         await D1ApiClient.syncUserData({
           memos:      mergedArr,
-          pinnedMemos: pinnedArr,
           themeColor:       localStorage.getItem('themeColor')       || '#969696',
           darkMode:         localStorage.getItem('darkMode')         || 'false',
           hitokotoConfig:   tryParse(localStorage.getItem('hitokotoConfig'),   { enabled: true }),

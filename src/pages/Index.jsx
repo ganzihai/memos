@@ -356,9 +356,7 @@ const Index = () => {
         const target = prev.find(m => String(m.id) === targetId);
         if (!target || target.is_pinned) return prev;
         const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: true, pinnedAt: now, updatedAt: now } : m);
-        const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
         D1ApiClient.updateMemoMeta(targetId, { is_pinned: true, pinned_at: now }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
-        D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
         _scheduleCloudSync?.('memo-pin');
         return next;
       });
@@ -366,9 +364,7 @@ const Index = () => {
     } else if (action === 'unpin') {
       setMemos(prev => {
         const next = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: false, pinnedAt: null, updatedAt: now } : m);
-        const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
         D1ApiClient.updateMemoMeta(targetId, { is_pinned: false, pinned_at: null }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
-        D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
         _scheduleCloudSync?.('memo-unpin');
         return next;
       });
@@ -543,9 +539,7 @@ const Index = () => {
       if (!target) return prev;
       const isPin = !target.is_pinned;
       const next  = prev.map(m => String(m.id) === targetId ? { ...m, is_pinned: isPin, pinnedAt: isPin ? now : null, updatedAt: now } : m);
-      const pinnedIds = next.filter(m => m.is_pinned).map(m => String(m.id));
       D1ApiClient.updateMemoMeta(targetId, { is_pinned: isPin, pinned_at: isPin ? now : null }).catch(() => uploadMemo(next.find(m => String(m.id) === targetId)));
-      D1ApiClient.updatePinnedIds(pinnedIds).catch(console.error);
       _scheduleCloudSync?.(isPin ? 'canvas-pin' : 'canvas-unpin');
       return next;
     });

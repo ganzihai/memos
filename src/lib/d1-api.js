@@ -16,6 +16,15 @@ export class D1ApiClient {
     }
   }
 
+  static async getHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    const storedPassword = localStorage.getItem('storedPassword');
+    if (storedPassword) {
+      headers['Authorization'] = `Bearer ${storedPassword}`;
+    }
+    return headers;
+  }
+
   // ---------- Memo CRUD ----------
 
   /**
@@ -24,7 +33,7 @@ export class D1ApiClient {
   static async upsertMemo(memo) {
     const now = new Date().toISOString();
     const payload = {
-      memo_id:    String(memo.id),
+      memo_id:    String(memo.id || memo.memo_id || ''),
       content:    memo.content,
       tags:       memo.tags || [],
       backlinks:  Array.isArray(memo.backlinks)   ? memo.backlinks.map(String)   : [],
@@ -37,7 +46,7 @@ export class D1ApiClient {
     };
     const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await this.getHeaders(),
       body: JSON.stringify(payload),
     });
     const result = await res.json();
@@ -51,17 +60,14 @@ export class D1ApiClient {
    * @param {{ is_public?: boolean, is_pinned?: boolean, pinned_at?: string|null }} meta
    */
   static async updateMemoMeta(memoId, meta) {
-    // 【修复】将 boolean 转为 D1 兼容的 0/1 整数，避免存入字符串 "true"/"false"
     const payload = {
       memo_id: String(memoId),
       ...meta,
-      ...(meta.is_public  !== undefined ? { is_public:  meta.is_public  ? 1 : 0 } : {}),
-      ...(meta.is_pinned  !== undefined ? { is_pinned:  meta.is_pinned  ? 1 : 0 } : {}),
     };
     try {
       const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
       return await res.json();
@@ -77,6 +83,7 @@ export class D1ApiClient {
   static async deleteMemo(memoId) {
     const res = await fetch(`${this.getBaseUrl()}/api/memos?memoId=${String(memoId)}`, {
       method: 'DELETE',
+      headers: await this.getHeaders(),
     });
     const result = await res.json();
     if (!result.success) throw new Error(result.error || '删除memo失败');
@@ -117,7 +124,7 @@ export class D1ApiClient {
 
         const res = await fetch(`${this.getBaseUrl()}/api/memos`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await this.getHeaders(),
           body: JSON.stringify(payload),
         });
         const r = await res.json();
@@ -158,25 +165,6 @@ export class D1ApiClient {
   // ---------- 设置 ----------
 
   /**
-   * 局部更新置顶 ID 列表（轻量级 PATCH）
-   * @param {Array<string|number>} pinnedIds
-   */
-  static async updatePinnedIds(pinnedIds) {
-    try {
-      const safeIds = pinnedIds.map(String);
-      const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pinned_ids: safeIds }),
-      });
-      return await res.json();
-    } catch (error) {
-      console.error('updatePinnedIds 失败:', error);
-      return { success: false, message: error.message };
-    }
-  }
-
-  /**
    * 全量写入用户设置
    */
   static async upsertUserSettings(settings) {
@@ -195,7 +183,7 @@ export class D1ApiClient {
 
     const res = await fetch(`${this.getBaseUrl()}/api/settings`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await this.getHeaders(),
       body: JSON.stringify(payload),
     });
     const result = await res.json();
