@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
 import { buildEmojiUrl, getEmojiCategory } from '@/config/emoji';
-import remarkGfm from 'remark-gfm'; 
+import remarkGfm from 'remark-gfm';
 
 const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   const { themeColor, currentFont } = useTheme();
@@ -11,11 +11,11 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   const parseContent = (text) => {
     const parts = [];
     let lastIndex = 0;
-    
+
     // 匹配标签的正则表达式
     const tagRegex = /(?:^|\s)(#[\u4e00-\u9fa5a-zA-Z0-9_\/]+)/g;
     let match;
-    
+
     while ((match = tagRegex.exec(text)) !== null) {
       // 添加标签前的文本
       if (match.index > lastIndex) {
@@ -27,7 +27,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           });
         }
       }
-      
+
       // 添加空格（如果标签前有空格）
       const spaceMatch = text.substring(match.index, match.index + match[0].length - match[1].length);
       if (spaceMatch) {
@@ -36,7 +36,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           content: spaceMatch
         });
       }
-      
+
       // 添加标签
       const tagContent = match[1]; // #标签内容
       const tagName = tagContent.substring(1); // 去掉#�?
@@ -45,10 +45,10 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
         content: tagContent,
         tagName: tagName
       });
-      
+
       lastIndex = match.index + match[0].length;
     }
-    
+
     // 添加剩余文本
     if (lastIndex < text.length) {
       parts.push({
@@ -56,7 +56,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
         content: text.substring(lastIndex)
       });
     }
-    
+
     return parts;
   };
 
@@ -180,16 +180,16 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
       l.href = 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
       document.head.appendChild(l);
     }
-    
+
     if (!window.mermaid && !window.__mermaidLoading) {
       window.__mermaidLoading = true;
       const ms = document.createElement('script');
       ms.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
-      ms.onload = () => { 
+      ms.onload = () => {
         window.__mermaidLoading = false;
         if (window.mermaid) {
-          window.mermaid.initialize({ 
-            startOnLoad: false, 
+          window.mermaid.initialize({
+            startOnLoad: false,
             theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
             securityLevel: 'loose'
           });
@@ -204,7 +204,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
   // Update mermaid theme when dark mode changes
   useEffect(() => {
     if (window.mermaid) {
-      window.mermaid.initialize({ 
+      window.mermaid.initialize({
         theme: darkMode ? 'dark' : 'default'
       });
       window.dispatchEvent(new Event('mermaid-theme-changed'));
@@ -225,7 +225,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           if (oldNode && oldNode.parentNode) {
             oldNode.parentNode.removeChild(oldNode);
           }
-          
+
           // 创建一个临时的包裹元素来进行渲染
           // ⚠️ 关键修复：Mermaid 在渲染连线和标签时，需要计算 SVG 元素的 BoundingBox (getBBox)
           // 解决方案：将其移出屏幕可视区域，但保持其渲染能力，并在DOM树的更安全的位置挂载
@@ -236,8 +236,8 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           tempContainer.style.left = '-9999px';
           tempContainer.style.visibility = 'hidden';
           // 确保它有足够的宽度进行布局
-          tempContainer.style.width = '1000px'; 
-          
+          tempContainer.style.width = '1000px';
+
           // 必须添加到 document.body 才能正确计算尺寸
           const targetParent = document.body || document.documentElement;
           if (targetParent) {
@@ -245,17 +245,17 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           } else {
             throw new Error("No DOM element available to append Mermaid container");
           }
-          
+
           // 尝试渲染
           // mermaid.render 在新版本中的签名是: render(id, text, container?)
           // 但有时容器可能还没有准备好，我们可以只传 id 和 text
           const { svg: svgCode } = await window.mermaid.render(idRef.current, text);
-          
+
           // 渲染完成后移除临时节点
           if (tempContainer && tempContainer.parentNode) {
             tempContainer.parentNode.removeChild(tempContainer);
           }
-          
+
           setSvg(svgCode);
           setError(false);
         } catch (e) {
@@ -276,11 +276,11 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
 
     useEffect(() => {
       renderMermaid();
-      
+
       const handleMermaidLoaded = () => renderMermaid();
       window.addEventListener('mermaid-loaded', handleMermaidLoaded);
       window.addEventListener('mermaid-theme-changed', handleMermaidLoaded);
-      
+
       return () => {
         window.removeEventListener('mermaid-loaded', handleMermaidLoaded);
         window.removeEventListener('mermaid-theme-changed', handleMermaidLoaded);
@@ -309,9 +309,9 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     }
 
     return (
-      <div 
+      <div
         className="my-4 flex justify-center overflow-x-auto bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-        dangerouslySetInnerHTML={{ __html: svg }} 
+        dangerouslySetInnerHTML={{ __html: svg }}
       />
     );
   };
@@ -358,7 +358,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
           const isSecondLevel = part.tagName.includes('/');
           const [parentTag, childTag] = isSecondLevel ? part.tagName.split('/') : [part.tagName, null];
           const isActive = part.tagName === activeTag;
-          
+
           return (
             <span
               key={index}
@@ -468,12 +468,12 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                         input: ({node, type, checked, ...props}) => {
                           if (type === 'checkbox') {
                             return (
-                              <input 
-                                type="checkbox" 
-                                checked={checked} 
-                                readOnly 
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                readOnly
                                 className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-70 cursor-not-allowed"
-                                {...props} 
+                                {...props}
                               />
                             );
                           }
@@ -520,18 +520,18 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                           if (!codeElement || !codeElement.props) {
                             return <pre {...props}>{children}</pre>;
                           }
-                          
+
                           const codeProps = codeElement.props;
                           const raw = String(codeProps.children || '');
                           const text = raw.replace(/\\n/g, '\n').replace(/\n$/, '');
                           const className = codeProps.className || '';
                           const m = /language-([\w-]+)/.exec(className);
                           const lang = m ? m[1] : null;
-                          
+
                           if (lang === 'mermaid') {
                             return <MermaidBlock text={text} />;
                           }
-                          
+
                           return <CodeBlock text={text} lang={lang} />;
                         },
                         code: ({node, className, children, ...props}) => {
@@ -617,12 +617,12 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                               input: ({node, type, checked, ...props}) => {
                                 if (type === 'checkbox') {
                                   return (
-                                    <input 
-                                      type="checkbox" 
-                                      checked={checked} 
-                                      readOnly 
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      readOnly
                                       className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-70 cursor-not-allowed"
-                                      {...props} 
+                                      {...props}
                                     />
                                   );
                                 }
@@ -669,18 +669,18 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
                                 if (!codeElement || !codeElement.props) {
                                   return <pre {...props}>{children}</pre>;
                                 }
-                                
+
                                 const codeProps = codeElement.props;
                                 const raw = String(codeProps.children || '');
                                 const text = raw.replace(/\\n/g, '\n').replace(/\n$/, '');
                                 const className = codeProps.className || '';
                                 const m = /language-([\w-]+)/.exec(className);
                                 const lang = m ? m[1] : null;
-                                
+
                                 if (lang === 'mermaid') {
                                   return <MermaidBlock text={text} />;
                                 }
-                                
+
                                 return <CodeBlock text={text} lang={lang} />;
                               },
                               code: ({node, className, children, ...props}) => {
