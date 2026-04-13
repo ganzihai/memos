@@ -90,8 +90,9 @@ export async function onRequest(context) {
           tags: JSON.stringify(tags || []),
           backlinks: JSON.stringify(backlinks || []),
           audio_clips: JSON.stringify(audio_clips || []),
-          is_public: (is_public === 1 || is_public === true) ? 1 : 0,
-          is_pinned: (is_pinned === 1 || is_pinned === true) ? 1 : 0,
+          // 默认设为私有 (0)，除非显式传入 1 或 true
+          is_public: (is_public === 1 || is_public === true || String(is_public) === '1' || String(is_public) === 'true') ? 1 : 0,
+          is_pinned: (is_pinned === 1 || is_pinned === true || String(is_pinned) === '1' || String(is_pinned) === 'true') ? 1 : 0,
           pinned_at: pinned_at || null,
           created_at: existingMemo ? existingMemo.created_at : (created_at || now),
           updated_at: updated_at || now
