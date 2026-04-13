@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '@/context/ThemeContext';
 import Spoiler from '@/components/Spoiler';
@@ -215,7 +215,7 @@ const ContentRenderer = ({ content, activeTag, onTagClick }) => {
     const [svg, setSvg] = useState('');
     const [error, setError] = useState(false);
     // 使用固定的随机ID，避免每次渲染都生成新的
-    const idRef = React.useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`);
+    const idRef = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`);
 
     const renderMermaid = async () => {
       if (window.mermaid && text) {
