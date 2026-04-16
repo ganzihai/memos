@@ -1,5 +1,5 @@
 /**
- * WeChat Article Relay for Cloudflare Pages (v4 - 代码块与清洗增强版)
+ * WeChat Article Relay for Cloudflare Pages (v6 - Memos Markdown 极致优化版)
  * 适配路径: /api/webhook/wp 或 /api/webhook/memos
  */
 
@@ -39,7 +39,6 @@ export async function onRequest(context) {
     if (isWechatUrl) {
       if (!EXPORTER_URL) throw new Error("未配置 EXPORTER_URL 环境变量");
 
-      // 强制抓取 HTML 以便进行深度清洗和标题提取
       const apiEndpoint =
         `${EXPORTER_URL}/api/public/v1/download?url=${encodeURIComponent(inputText)}&format=html`;
 
@@ -49,7 +48,7 @@ export async function onRequest(context) {
 
       const htmlRaw = await fetchRes.text();
 
-      // --- 1. 提取标题 (参考 main.py 逻辑) ---
+      // --- 1. 提取标题 ---
       const titleMatch =
         htmlRaw.match(/id="activity-name"[^>]*>([\s\S]*?)<\/h1>/i) ||
         htmlRaw.match(/class="rich_media_title"[^>]*>([\s\S]*?)<\/h1>/i) ||
@@ -61,21 +60,31 @@ export async function onRequest(context) {
       }
       title = title.replace(/[-_]微信公众号.*$/, "").trim();
 
-      // --- 2. 提取正文 (js_content) ---
+      // --- 2. 更加鲁棒的正文提取 (定位 js_content) ---
       let bodyHtml = "";
-      const contentMatch =
-        htmlRaw.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>\s*(?:<script|<!--|$)/i);
-      if (contentMatch) {
-        bodyHtml = contentMatch[1].trim();
+      const contentStartMatch = htmlRaw.match(/<div[^>]+id="js_content"[^>]*>/i);
+      if (contentStartMatch) {
+        const startIdx = contentStartMatch.index + contentStartMatch[0].length;
+        // 寻找正文结束点：通常是下一个脚本标签、底部广告位或点赞分享区
+        const contentEndMatch = htmlRaw.slice(startIdx).match(/<(?:script|div[^>]+id="js_bottom_ad_area"|div[^>]+id="js_to_share")/i);
+        if (contentEndMatch) {
+          bodyHtml = htmlRaw.slice(startIdx, startIdx + contentEndMatch.index).trim();
+        } else {
+          // 兜底：寻找最后一个主要的 </div>
+          const lastDivIdx = htmlRaw.lastIndexOf("</div>");
+          bodyHtml = htmlRaw.slice(startIdx, lastDivIdx).trim();
+        }
+        // 移除可能残留在末尾的闭合标签
+        bodyHtml = bodyHtml.replace(/<\/div>\s*$/i, "");
       } else {
         bodyHtml = htmlRaw;
       }
 
       // --- 3. 深度清洗 ---
 
-      // A. 移除开头空标签、空白 section、多余 br (解决多余空行问题)
-      bodyHtml = bodyHtml.replace(/^(\s*<(section|p|span|div)[^>]*>\s*(<br\/?>|&nbsp;|\s)*\s*<\/\2>)+/gi, "");
-      bodyHtml = bodyHtml.replace(/^(\s*<br\/?>\s*)+/gi, "");
+      // A. 移除微信垃圾组件 (公众号关注卡片、视频号卡片等)
+      bodyHtml = bodyHtml.replace(/<(mp-common-profile|mp-common-share-card|mp-common-videosnap)\b[^<]*(?:(?!<\/\1>)<[^<]*)*<\/\1>/gi, "");
+      bodyHtml = bodyHtml.replace(/<section[^>]+class="mp_profile_iframe_wrp"[^>]*>[\s\S]*?<\/section>/gi, "");
 
       // B. 处理图片 (优先使用 data-src，解决 wsrv.nl 代理)
       bodyHtml = bodyHtml.replace(/<(?:img|source)[^>]+>/g, (tag) => {
@@ -86,20 +95,15 @@ export async function onRequest(context) {
           const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp`;
           return `<img src="${proxyUrl}" style="max-width:100%;height:auto;display:block;margin:10px auto;">`;
         }
-        return ""; // 移除无效图片标签
+        return "";
       });
 
-      // C. 代码块清洗 (模拟 main.py 使用 BeautifulSoup 的 get_text 行为)
+      // C. 代码块清洗
       bodyHtml = bodyHtml.replace(/<pre([^>]*)>([\s\S]*?)<\/pre>/gi, (match, attrs, inner) => {
-        // 提取编程语言 (优先从 data-language 或 class 获取)
         let lang = "plaintext";
         const langMatch = attrs.match(/data-language="([\w-]+)"/i) || attrs.match(/language-([\w-]+)/i) || inner.match(/language-([\w-]+)/i);
         if (langMatch) lang = langMatch[1];
 
-        // 清洗内容：
-        // 1. 将 <br> 换回 \n
-        // 2. 移除所有内部标签 (如 <code>, <span>)
-        // 3. 还原 HTML 实体，防止后续双重转义 (模拟 BS4 get_text)
         let cleanCode = inner
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<[^>]+>/g, "")
@@ -111,7 +115,6 @@ export async function onRequest(context) {
           .replace(/&#39;/g, "'")
           .trim();
 
-        // 关键：针对 WordPress 的 HTML 模式进行标准转义保护
         const escapedCode = cleanCode
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
@@ -122,28 +125,31 @@ export async function onRequest(context) {
         return `<pre class="wp-block-code"><code class="${lang} language-${lang}">${escapedCode}</code></pre>`;
       });
 
-      // D. 彻底移除无用标签
+      // D. 彻底移除 script/style/iframe
       bodyHtml = bodyHtml.replace(/<(script|style|iframe)\b[^<]*(?:(?!<\/\1>)<[^<]*)*<\/\1>/gi, "");
 
+      // E. 移除开头多余的空行和空标签 (增强版)
+      bodyHtml = bodyHtml.replace(/^(\s*<(section|p|span|div)[^>]*>\s*(<br\/?>|&nbsp;|\s)*\s*<\/\2>|\s*<br\/?>\s*)+/gi, "");
+
       if (target === "memos") {
-        // Memos 模式：转换为极致精简的 Markdown
+        // --- Memos 专用 Markdown 转换 (修正代码块显示) ---
         finalContent = bodyHtml
+          .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n### $1\n")
           .replace(/<p[^>]*>/gi, "\n")
           .replace(/<\/p>/gi, "")
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**")
-          .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n## $1\n")
-          // 还原代码块为 Markdown 语法 (处理语言类名并取消转义)
-          .replace(/<pre class="wp-block-code"><code class="([\w-]+) language-[\w-]+">([\s\S]*?)<\/code><\/pre>/gi, (m, l, c) => {
-            const unescaped = c
+          // 极致还原代码块：提取 lang 和 内部文本，取消转义
+          .replace(/<pre[^>]*><code class="([\w-]+) language-[\w-]+">([\s\S]*?)<\/code><\/pre>/gi, (m, l, c) => {
+            const rawCode = c
               .replace(/&lt;/g, "<")
               .replace(/&gt;/g, ">")
               .replace(/&quot;/g, '"')
               .replace(/&#039;/g, "'")
               .replace(/&amp;/g, "&");
-            return `\n\`\`\`${l}\n${unescaped}\n\`\`\`\n`;
+            const langLabel = l === "plaintext" ? "" : l;
+            return `\n\`\`\`${langLabel}\n${rawCode}\n\`\`\`\n`;
           })
-          // 将图片转换为 Markdown 语法
           .replace(/<img [^>]*src="([^"]+)"[^>]*>/gi, "\n![]($1)\n")
           .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (m, c) => `\n> ${c.replace(/<[^>]+>/g, "").trim()}\n`)
           .replace(/<[^>]+>/g, "")
