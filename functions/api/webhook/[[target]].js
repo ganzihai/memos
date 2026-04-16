@@ -1,11 +1,11 @@
 /**
- * WeChat Article Relay for Cloudflare Pages (v3 - 精确清洗版)
+ * WeChat Article Relay for Cloudflare Pages (v4 - 代码块与清洗增强版)
  * 适配路径: /api/webhook/wp 或 /api/webhook/memos
  */
 
 export async function onRequest(context) {
   const { request, env, params } = context;
-  
+
   // 1. 获取路径中的 target (wp 或 memos)
   const target = (Array.isArray(params.target) ? params.target[0] : (params.target || "wp")).toLowerCase();
 
@@ -26,68 +26,55 @@ export async function onRequest(context) {
     if (!inputText) throw new Error("未检测到有效内容");
 
     const isWechatUrl = inputText.startsWith("http") && inputText.includes("mp.weixin.qq.com");
-    
-    // 环境变量
+
     const EXPORTER_URL = env.EXPORTER_URL?.replace(/\/$/, "");
     const WP_URL = env.WP_URL?.replace(/\/$/, "");
     const WP_USER = env.WP_USER;
-    const WP_PASS = env.WP_PASS; 
+    const WP_PASS = env.WP_PASS;
     const DB = env.DB;
 
     let title = "无标题";
     let finalContent = inputText;
 
     if (isWechatUrl) {
-      if (!EXPORTER_URL) throw new Error("未配置 EXPORTER_URL");
-      
-      // 统一请求 HTML 格式
-      const apiEndpoint = `${EXPORTER_URL}/api/public/v1/download?url=${encodeURIComponent(inputText)}&format=html`;
+      if (!EXPORTER_URL) throw new Error("未配置 EXPORTER_URL 环境变量");
 
-      console.log(`正在抓取并精确清洗: ${inputText}`);
+      // 强制抓取 HTML 以便进行深度清洗和标题提取
+      const apiEndpoint =
+        `${EXPORTER_URL}/api/public/v1/download?url=${encodeURIComponent(inputText)}&format=html`;
+
+      console.log(`正在抓取并清洗数据: ${inputText}`);
       const fetchRes = await fetch(apiEndpoint);
       if (!fetchRes.ok) throw new Error(`抓取服务失败: ${fetchRes.status}`);
-      
+
       const htmlRaw = await fetchRes.text();
 
-      // --- 1. 提取标题 ---
-      // 优先从 activity-name 提取，这是微信最准确的标题 ID
-      const titleMatch = htmlRaw.match(/id="activity-name"[^>]*>([\s\S]*?)<\/h1>/i) || 
-                         htmlRaw.match(/class="rich_media_title"[^>]*>([\s\S]*?)<\/h1>/i) ||
-                         htmlRaw.match(/property="og:title"[^>]+content="([^"]*)"/i);
-      
+      // --- 1. 提取标题 (参考 main.py 逻辑) ---
+      const titleMatch =
+        htmlRaw.match(/id="activity-name"[^>]*>([\s\S]*?)<\/h1>/i) ||
+        htmlRaw.match(/class="rich_media_title"[^>]*>([\s\S]*?)<\/h1>/i) ||
+        htmlRaw.match(/property="og:title"[^>]+content="([^"]*)"/i) ||
+        htmlRaw.match(/<title>(.*?)<\/title>/i);
+
       if (titleMatch) {
         title = (titleMatch[1] || titleMatch[2]).replace(/<[^>]+>/g, "").trim();
       }
       title = title.replace(/[-_]微信公众号.*$/, "").trim();
 
       // --- 2. 提取正文 (js_content) ---
-      // 微信的正文始终在 id="js_content" 的 div 中
       let bodyHtml = "";
-      // 改进正则：匹配到 js_content div 的开头，并截取到文章末尾常见的标志位（如留言或脚本开始处）
-      const contentStartIdx = htmlRaw.indexOf('id="js_content"');
-      if (contentStartIdx !== -1) {
-        // 找到该 div 标签闭合的位置
-        const divStart = htmlRaw.lastIndexOf('<div', contentStartIdx);
-        // 微信正文通常很长，且包含大量嵌套 div。
-        // 这里采用保守策略：提取从 js_content 开始到第一个 script 标签或 inner 容器结束的部分
-        const segment = htmlRaw.substring(divStart);
-        const match = segment.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>\s*(?:<script|<!--|$)/i);
-        if (match) {
-          bodyHtml = match[1].trim();
-        } else {
-          // 如果正则失效，提取一段足够长的内容
-          bodyHtml = segment.split('</div>')[0].trim();
-        }
+      const contentMatch =
+        htmlRaw.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>\s*(?:<script|<!--|$)/i);
+      if (contentMatch) {
+        bodyHtml = contentMatch[1].trim();
       } else {
         bodyHtml = htmlRaw;
       }
 
       // --- 3. 深度清洗 ---
-      
-      // A. 移除文章开头可能存在的空标签、空白 section、多余 br
-      // 循环移除开头的 <section><br/></section> 等垃圾占位符
+
+      // A. 移除开头空标签、空白 section、多余 br (解决多余空行问题)
       bodyHtml = bodyHtml.replace(/^(\s*<(section|p|span|div)[^>]*>\s*(<br\/?>|&nbsp;|\s)*\s*<\/\2>)+/gi, "");
-      // 移除开头零碎的 br
       bodyHtml = bodyHtml.replace(/^(\s*<br\/?>\s*)+/gi, "");
 
       // B. 处理图片 (wsrv.nl 代理)
@@ -97,26 +84,50 @@ export async function onRequest(context) {
         return `<img src="${proxyUrl}" style="max-width:100%;height:auto;display:block;margin:10px auto;">`;
       });
 
-      // C. 代码块清洗
-      bodyHtml = bodyHtml.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (match, inner) => {
-        let code = inner.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
-        return `<pre class="wp-block-code"><code>${code}</code></pre>`;
+      // C. 代码块清洗 (参考 main.py 逻辑)
+      bodyHtml = bodyHtml.replace(/<pre([^>]*)>([\s\S]*?)<\/pre>/gi, (match, attrs, inner) => {
+        // 尝试提取编程语言
+        let lang = "plaintext";
+        const langMatch = attrs.match(/language-([\w-]+)/i) || inner.match(/language-([\w-]+)/i);
+        if (langMatch) lang = langMatch[1];
+
+        // 清洗内容：将 <br> 换回 \n，移除内部多余 HTML 标签，处理非断行空格
+        let cleanCode = inner
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/\xa0/g, " ")
+          .trim();
+
+        // 关键：HTML 转义保护，确保代码中的 < > & 等符号能原样显示 (针对 WP)
+        const escapedCode = cleanCode
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+
+        return `<pre class="wp-block-code"><code class="${lang} language-${lang}">${escapedCode}</code></pre>`;
       });
 
-      // D. 彻底移除 script, style, iframe
+      // D. 彻底移除无用标签
       bodyHtml = bodyHtml.replace(/<(script|style|iframe)\b[^<]*(?:(?!<\/\1>)<[^<]*)*<\/\1>/gi, "");
 
       if (target === "memos") {
-        // Memos 模式：转为极致精简的 Markdown
+        // Memos 模式：转换为极致精简的 Markdown
         finalContent = bodyHtml
           .replace(/<p[^>]*>/gi, "\n")
           .replace(/<\/p>/gi, "")
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**")
           .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n## $1\n")
+          // 还原代码块为 Markdown 语法
+          .replace(/<pre class="wp-block-code"><code class="([\w-]+) language-[\w-]+">([\s\S]*?)<\/code><\/pre>/gi, (m, l, c) => {
+            const unescaped = c.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, "&");
+            return `\n\`\`\`${l}\n${unescaped}\n\`\`\`\n`;
+          })
           .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (m, c) => `\n> ${c.replace(/<[^>]+>/g, "").trim()}\n`)
-          .replace(/<[^>]+>/g, "") // 移除所有剩余标签
-          .replace(/\n{3,}/g, "\n\n") // 合并换行
+          .replace(/<[^>]+>/g, "")
+          .replace(/\n{3,}/g, "\n\n")
           .trim();
       } else {
         finalContent = bodyHtml;
