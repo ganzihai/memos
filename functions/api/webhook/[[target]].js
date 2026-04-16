@@ -1,13 +1,12 @@
 /**
- * WeChat Article Relay for Cloudflare Pages (v2 - 深度清洗版)
- * 路径: /api/webhook/wp 或 /api/webhook/memos
+ * WeChat Article Relay for Cloudflare Pages (v3 - 精确清洗版)
+ * 适配路径: /api/webhook/wp 或 /api/webhook/memos
  */
 
 export async function onRequest(context) {
   const { request, env, params } = context;
   
   // 1. 获取路径中的 target (wp 或 memos)
-  // Cloudflare Pages Functions 中 params.target 通常是一个数组
   const target = (Array.isArray(params.target) ? params.target[0] : (params.target || "wp")).toLowerCase();
 
   const corsHeaders = {
@@ -24,13 +23,11 @@ export async function onRequest(context) {
     const body = await request.json();
     const inputText = (body.url || body.text || body.content || "").trim();
 
-    if (!inputText) {
-      throw new Error("未检测到有效内容");
-    }
+    if (!inputText) throw new Error("未检测到有效内容");
 
     const isWechatUrl = inputText.startsWith("http") && inputText.includes("mp.weixin.qq.com");
     
-    // 环境变量配置
+    // 环境变量
     const EXPORTER_URL = env.EXPORTER_URL?.replace(/\/$/, "");
     const WP_URL = env.WP_URL?.replace(/\/$/, "");
     const WP_USER = env.WP_USER;
@@ -41,105 +38,113 @@ export async function onRequest(context) {
     let finalContent = inputText;
 
     if (isWechatUrl) {
-      if (!EXPORTER_URL) throw new Error("未配置 EXPORTER_URL 环境变量");
+      if (!EXPORTER_URL) throw new Error("未配置 EXPORTER_URL");
       
-      // 强制抓取 HTML 以便进行深度清洗和标题提取
+      // 统一请求 HTML 格式
       const apiEndpoint = `${EXPORTER_URL}/api/public/v1/download?url=${encodeURIComponent(inputText)}&format=html`;
 
-      console.log(`正在抓取数据并清洗: ${inputText}`);
+      console.log(`正在抓取并精确清洗: ${inputText}`);
       const fetchRes = await fetch(apiEndpoint);
-      if (!fetchRes.ok) throw new Error(`抓取服务响应异常: ${fetchRes.status}`);
+      if (!fetchRes.ok) throw new Error(`抓取服务失败: ${fetchRes.status}`);
       
       const htmlRaw = await fetchRes.text();
 
-      // --- 1. 提取标题 (参考 main.py 逻辑) ---
-      const titleMatch = 
-        htmlRaw.match(/<h1[^>]+id="activity-name"[^>]*>([\s\S]*?)<\/h1>/i) || 
-        htmlRaw.match(/<h1[^>]+class="[^"]*rich_media_title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
-        htmlRaw.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i) ||
-        htmlRaw.match(/<title>(.*?)<\/title>/i);
+      // --- 1. 提取标题 ---
+      // 优先从 activity-name 提取，这是微信最准确的标题 ID
+      const titleMatch = htmlRaw.match(/id="activity-name"[^>]*>([\s\S]*?)<\/h1>/i) || 
+                         htmlRaw.match(/class="rich_media_title"[^>]*>([\s\S]*?)<\/h1>/i) ||
+                         htmlRaw.match(/property="og:title"[^>]+content="([^"]*)"/i);
       
       if (titleMatch) {
-        // titleMatch[1] 是 h1 内容，titleMatch[2] 是 meta content
-        title = (titleMatch[1] || titleMatch[2] || "微信文章").replace(/<[^>]+>/g, "").trim();
+        title = (titleMatch[1] || titleMatch[2]).replace(/<[^>]+>/g, "").trim();
       }
       title = title.replace(/[-_]微信公众号.*$/, "").trim();
 
-      // --- 2. 提取正文 (解决开头空行问题的关键) ---
-      // 仅提取 js_content 内部内容，跳过采集器附带的冗余 HTML/CSS
+      // --- 2. 提取正文 (js_content) ---
+      // 微信的正文始终在 id="js_content" 的 div 中
       let bodyHtml = "";
-      const contentMatch = htmlRaw.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>\s*(?:<script|$)/i);
-      if (contentMatch) {
-        bodyHtml = contentMatch[1].trim();
+      // 改进正则：匹配到 js_content div 的开头，并截取到文章末尾常见的标志位（如留言或脚本开始处）
+      const contentStartIdx = htmlRaw.indexOf('id="js_content"');
+      if (contentStartIdx !== -1) {
+        // 找到该 div 标签闭合的位置
+        const divStart = htmlRaw.lastIndexOf('<div', contentStartIdx);
+        // 微信正文通常很长，且包含大量嵌套 div。
+        // 这里采用保守策略：提取从 js_content 开始到第一个 script 标签或 inner 容器结束的部分
+        const segment = htmlRaw.substring(divStart);
+        const match = segment.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>\s*(?:<script|<!--|$)/i);
+        if (match) {
+          bodyHtml = match[1].trim();
+        } else {
+          // 如果正则失效，提取一段足够长的内容
+          bodyHtml = segment.split('</div>')[0].trim();
+        }
       } else {
-        bodyHtml = htmlRaw; // 兜底
+        bodyHtml = htmlRaw;
       }
 
-      // --- 3. 深度清洗 HTML ---
+      // --- 3. 深度清洗 ---
       
-      // A. 处理图片反盗链 (wsrv.nl)
-      bodyHtml = bodyHtml.replace(/<img[^>]+(?:data-src|src)="([^">]+)"[^>]*>/g, (match, url) => {
+      // A. 移除文章开头可能存在的空标签、空白 section、多余 br
+      // 循环移除开头的 <section><br/></section> 等垃圾占位符
+      bodyHtml = bodyHtml.replace(/^(\s*<(section|p|span|div)[^>]*>\s*(<br\/?>|&nbsp;|\s)*\s*<\/\2>)+/gi, "");
+      // 移除开头零碎的 br
+      bodyHtml = bodyHtml.replace(/^(\s*<br\/?>\s*)+/gi, "");
+
+      // B. 处理图片 (wsrv.nl 代理)
+      bodyHtml = bodyHtml.replace(/<(?:img|source)[^>]+(?:data-src|src)="([^">]+)"[^>]*>/g, (match, url) => {
         const cleanUrl = url.split("?")[0];
-        return `<img src="https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp" style="max-width:100%;height:auto;">`;
+        const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp`;
+        return `<img src="${proxyUrl}" style="max-width:100%;height:auto;display:block;margin:10px auto;">`;
       });
 
-      // B. 处理代码块 (参考 main.py: 将 <br/> 转换为 \n，并包装为 WP 标准格式)
-      bodyHtml = bodyHtml.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (match, codeInner) => {
-        let cleanCode = codeInner.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
-        const langMatch = match.match(/language-([\w-]+)/);
-        const lang = langMatch ? langMatch[1] : "plaintext";
-        return `<pre class="wp-block-code"><code class="${lang} language-${lang}">${cleanCode}</code></pre>`;
+      // C. 代码块清洗
+      bodyHtml = bodyHtml.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (match, inner) => {
+        let code = inner.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
+        return `<pre class="wp-block-code"><code>${code}</code></pre>`;
       });
 
-      // C. 移除脚本、样式等干扰标签
-      bodyHtml = bodyHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      bodyHtml = bodyHtml.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
-      bodyHtml = bodyHtml.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "");
+      // D. 彻底移除 script, style, iframe
+      bodyHtml = bodyHtml.replace(/<(script|style|iframe)\b[^<]*(?:(?!<\/\1>)<[^<]*)*<\/\1>/gi, "");
 
       if (target === "memos") {
-        // 简易 HTML 转 Markdown 用于 Memos (因为 Memos 不支持直接渲染 HTML)
+        // Memos 模式：转为极致精简的 Markdown
         finalContent = bodyHtml
           .replace(/<p[^>]*>/gi, "\n")
           .replace(/<\/p>/gi, "")
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**")
           .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n## $1\n")
-          .replace(/<[^>]+>/g, "") // 移除剩余 HTML 标签
-          .replace(/\n{3,}/g, "\n\n") // 合并过多换行
+          .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (m, c) => `\n> ${c.replace(/<[^>]+>/g, "").trim()}\n`)
+          .replace(/<[^>]+>/g, "") // 移除所有剩余标签
+          .replace(/\n{3,}/g, "\n\n") // 合并换行
           .trim();
       } else {
         finalContent = bodyHtml;
       }
     }
 
-    // --- 分发推送 ---
+    // --- 4. 分发推送 ---
     if (target === "memos") {
       if (!DB) throw new Error("未绑定 D1 数据库");
-      
       const memoId = "wc_" + Date.now().toString();
       const now = new Date().toISOString();
       const memosBody = title !== "无标题" ? `# ${title}\n\n${finalContent}` : finalContent;
 
       await DB.prepare(
         `INSERT INTO memos (memo_id, content, tags, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(
-        memoId, memosBody, JSON.stringify(["微信采集"]), 0, now, now
-      ).run();
+      ).bind(memoId, memosBody, JSON.stringify(["微信采集"]), 0, now, now).run();
 
       return new Response(JSON.stringify({ success: true, target: "memos", id: memoId, title }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
 
-    } else if (target === "wp") {
-      if (!WP_URL || !WP_PASS) throw new Error("未配置 WordPress 环境变量");
+    } else {
+      if (!WP_URL || !WP_PASS) throw new Error("未配置 WordPress 环境");
 
       const wpAuth = btoa(`${WP_USER}:${WP_PASS}`);
       const wpResp = await fetch(`${WP_URL}/wp-json/wp/v2/posts`, {
         method: "POST",
-        headers: {
-          "Authorization": `Basic ${wpAuth}`,
-          "Content-Type": "application/json"
-        },
+        headers: { "Authorization": `Basic ${wpAuth}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title,
           content: finalContent,
@@ -149,13 +154,11 @@ export async function onRequest(context) {
       });
 
       const wpData = await wpResp.json();
-      if (!wpResp.ok) throw new Error(`WordPress 错误: ${wpData.message}`);
+      if (!wpResp.ok) throw new Error(`WP错误: ${wpData.message}`);
 
-      return new Response(JSON.stringify({ success: true, target: "wp", id: wpData.id, link: wpData.link, title }), {
+      return new Response(JSON.stringify({ success: true, target: "wp", id: wpData.id, title }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
-    } else {
-      throw new Error(`不支持的目标: ${target}`);
     }
 
   } catch (err) {
