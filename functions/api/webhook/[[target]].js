@@ -77,28 +77,41 @@ export async function onRequest(context) {
       bodyHtml = bodyHtml.replace(/^(\s*<(section|p|span|div)[^>]*>\s*(<br\/?>|&nbsp;|\s)*\s*<\/\2>)+/gi, "");
       bodyHtml = bodyHtml.replace(/^(\s*<br\/?>\s*)+/gi, "");
 
-      // B. 处理图片 (wsrv.nl 代理)
-      bodyHtml = bodyHtml.replace(/<(?:img|source)[^>]+(?:data-src|src)="([^">]+)"[^>]*>/g, (match, url) => {
-        const cleanUrl = url.split("?")[0];
-        const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp`;
-        return `<img src="${proxyUrl}" style="max-width:100%;height:auto;display:block;margin:10px auto;">`;
+      // B. 处理图片 (优先使用 data-src，解决 wsrv.nl 代理)
+      bodyHtml = bodyHtml.replace(/<(?:img|source)[^>]+>/g, (tag) => {
+        const urlMatch = tag.match(/data-src="([^">]+)"/i) || tag.match(/src="([^">]+)"/i);
+        if (urlMatch) {
+          const url = urlMatch[1];
+          const cleanUrl = url.split("?")[0];
+          const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp`;
+          return `<img src="${proxyUrl}" style="max-width:100%;height:auto;display:block;margin:10px auto;">`;
+        }
+        return ""; // 移除无效图片标签
       });
 
-      // C. 代码块清洗 (参考 main.py 逻辑)
+      // C. 代码块清洗 (模拟 main.py 使用 BeautifulSoup 的 get_text 行为)
       bodyHtml = bodyHtml.replace(/<pre([^>]*)>([\s\S]*?)<\/pre>/gi, (match, attrs, inner) => {
-        // 尝试提取编程语言
+        // 提取编程语言 (优先从 data-language 或 class 获取)
         let lang = "plaintext";
-        const langMatch = attrs.match(/language-([\w-]+)/i) || inner.match(/language-([\w-]+)/i);
+        const langMatch = attrs.match(/data-language="([\w-]+)"/i) || attrs.match(/language-([\w-]+)/i) || inner.match(/language-([\w-]+)/i);
         if (langMatch) lang = langMatch[1];
 
-        // 清洗内容：将 <br> 换回 \n，移除内部多余 HTML 标签，处理非断行空格
+        // 清洗内容：
+        // 1. 将 <br> 换回 \n
+        // 2. 移除所有内部标签 (如 <code>, <span>)
+        // 3. 还原 HTML 实体，防止后续双重转义 (模拟 BS4 get_text)
         let cleanCode = inner
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<[^>]+>/g, "")
-          .replace(/\xa0/g, " ")
+          .replace(/&nbsp;|\xa0/g, " ")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
           .trim();
 
-        // 关键：HTML 转义保护，确保代码中的 < > & 等符号能原样显示 (针对 WP)
+        // 关键：针对 WordPress 的 HTML 模式进行标准转义保护
         const escapedCode = cleanCode
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
@@ -120,11 +133,18 @@ export async function onRequest(context) {
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**")
           .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n## $1\n")
-          // 还原代码块为 Markdown 语法
+          // 还原代码块为 Markdown 语法 (处理语言类名并取消转义)
           .replace(/<pre class="wp-block-code"><code class="([\w-]+) language-[\w-]+">([\s\S]*?)<\/code><\/pre>/gi, (m, l, c) => {
-            const unescaped = c.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, "&");
+            const unescaped = c
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&quot;/g, '"')
+              .replace(/&#039;/g, "'")
+              .replace(/&amp;/g, "&");
             return `\n\`\`\`${l}\n${unescaped}\n\`\`\`\n`;
           })
+          // 将图片转换为 Markdown 语法
+          .replace(/<img [^>]*src="([^"]+)"[^>]*>/gi, "\n![]($1)\n")
           .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (m, c) => `\n> ${c.replace(/<[^>]+>/g, "").trim()}\n`)
           .replace(/<[^>]+>/g, "")
           .replace(/\n{3,}/g, "\n\n")
