@@ -528,4 +528,28 @@
     outline: none !important;
     box-shadow: none !important;
   }
+  /* Task list (- [ ] / - [x]) 对齐修复 */
+  .prose ul li input[type="checkbox"],
+  .markdown-body ul li input[type="checkbox"],
+  ul.contains-task-list li input[type="checkbox"],
+  li.task-list-item input[type="checkbox"] {
+    position: relative;
+    margin: 0 0.4em 0 0;
+    vertical-align: middle;
+    top: -0.05em;
+  }
 
+  ul.contains-task-list,
+  ul li.task-list-item {
+    list-style: none;
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  li.task-list-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+  }
