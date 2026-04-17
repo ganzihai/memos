@@ -104,13 +104,15 @@ const MemoList = ({
     const attachments = [];
     const lines = (content || '').split('\n');
     const newLines = [];
-    const re = /\[([^\]]+)\]\(([^)]+)\)/g;
+    // 只提取"整行就是一个裸URL"的情况，带文字描述的 [text](url) 保留在正文
+    const bareUrlRe = /^(https?:\/\/\S+)$/;
     for (const line of lines) {
-      const stripped = line.replace(re, '').trim();
-      if (stripped === '' && line.trim() !== '') {
-        let m; re.lastIndex = 0;
-        while ((m = re.exec(line)) !== null) attachments.push({ name: m[1], url: m[2] });
-      } else { newLines.push(line); }
+      const trimmed = line.trim();
+      if (bareUrlRe.test(trimmed)) {
+        attachments.push({ name: trimmed, url: trimmed });
+      } else {
+        newLines.push(line);
+      }
     }
     return { attachments, newContent: newLines.join('\n').trim() };
   };
