@@ -100,22 +100,10 @@ const MemoList = ({
 
   const toggleExpand = (id) => setExpandedMemos(p => ({ ...p, [id]: !p[id] }));
 
-  const extractAttachments = (content) => {
-    const attachments = [];
-    const lines = (content || '').split('\n');
-    const newLines = [];
-    // 只提取"整行就是一个裸URL"的情况，带文字描述的 [text](url) 保留在正文
-    const bareUrlRe = /^(https?:\/\/\S+)$/;
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (bareUrlRe.test(trimmed)) {
-        attachments.push({ name: trimmed, url: trimmed });
-      } else {
-        newLines.push(line);
-      }
-    }
-    return { attachments, newContent: newLines.join('\n').trim() };
-  };
+  const extractAttachments = (content) => ({
+    attachments: [],
+    newContent: (content || '').trim()
+  });
 
   const MAX_LEN = 200;
 
